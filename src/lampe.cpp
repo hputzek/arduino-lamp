@@ -1,11 +1,11 @@
 #include <Arduino.h>
-#include "FastLED.h"
+#include <FastLED.h>
 #include <Fader.h>
 
 // How many leds in your strip?
 #define NUM_LEDS 15
 #define DATA_PIN 3
-#define BRIGHTNESS 8
+#define BRIGHTNESS 200
 
 // lamp setup
 #define LAMP_NUM 15
@@ -13,9 +13,10 @@
 
 void setLed(byte realLedNum, byte brightness);
 void lampCallback(byte id, uint8_t brightness);
-void getLampsBrightness(float *brightnessArray, byte lampCount, int loverBoundary, int upperBoundary, float spread, float targetBrightness);
+void getLampsBrightness(int *brightnessArray, byte lampCount, int loverBoundary, int upperBoundary, int spread, int targetBrightness);
 void updateLamps();
 void bubbleSort(float A[],int len);
+void bubbleUnsort(int *list, int length);
 
 // Define the array of leds
 CRGB leds[NUM_LEDS];
@@ -38,69 +39,51 @@ Fader lamps[LAMP_NUM] = {
   Fader(15,lampCallback)
 };
 
-float brightnessArray[14];
+int brightnessArray[14];
 
 void lampCallback(byte id, uint8_t brightness){
 	setLed(id, brightness);
 }
 
-void getLampsBrightness(float *brightnessArray, byte lampCount, int lowerBoundary, int upperBoundary,float spread, float targetBrightness) {
-//	0 1 2 3 4 5 6 7 8 9 10  # The universe.
-//	|                   |   # Place fixed dividers at 0, 10.
-//	|   |     |       | |   # Add 4 - 1 randomly chosen dividers in [1, 9]
-//	  a    b      c    d    # Compute the 4 differences: 2 3 4 1
+void getLampsBrightness(int *brightnessArray, byte lampCount, int lowerBoundary, int upperBoundary,int spread, int targetBrightness) {
+    //spread /= 2;
+    int loopCount = lampCount;
 
-  spread = min(targetBrightness, spread);
+    if (lampCount % 2 == 1) {
+      loopCount--;
+    }
 
-  float minimum = max(targetBrightness - spread * lampCount, lowerBoundary);
-	float maximum = min(targetBrightness + spread * lampCount, upperBoundary);
+    for (int i = 0; i <= loopCount; i += 2) {
+      int randomValue = random8(spread / 2, spread);
+      int upperOverflow = (targetBrightness + randomValue) - upperBoundary;
+      int lowerOverflow = (targetBrightness -  randomValue) + lowerBoundary;
 
-  if(targetBrightness + spread > upperBoundary) {
-    minimum -= targetBrightness + spread - upperBoundary;
-  }
+      if(upperOverflow < 0) {
+        upperOverflow = 0;
+      }
 
-  if(targetBrightness - spread < lowerBoundary) {
-    maximum += spread - targetBrightness + lowerBoundary;
-    //maximum = maximum / 2;
-  }
+      if (lowerOverflow > 0) {
+        lowerOverflow = 0;
+      }
+      brightnessArray[i] = min(targetBrightness + randomValue, upperBoundary) + lowerOverflow;
+      brightnessArray[i + 1] = max(targetBrightness - randomValue, lowerBoundary) + upperOverflow ;
+    }
 
-
-	float dividers[lampCount + 1];
-	dividers[0] = minimum;
-	dividers[lampCount] = maximum;
-
-	for (int i = 1; i < lampCount; i = i + 1) {
-		dividers[i] = random(minimum,maximum);
-	}
-
-  bubbleSort(dividers, lampCount + 1);
-
-	for (int i = 0; i < lampCount; i = i + 1) {
-		brightnessArray[i] = max(dividers[i],dividers[i+1]) - min(dividers[i],dividers[i+1]) + targetBrightness - spread / lampCount * 2;
-	}
-  float mysum = 0;
-	for(int i = 0; i < lampCount; i++)
-	{
-    mysum += brightnessArray[i];
-	}
-  if(int(mysum / lampCount) != int(targetBrightness)) {
-    Serial.println("-----------------");
-    Serial.print("Result: ");
-    Serial.println(mysum / lampCount);
-    Serial.print("Target value: ");
-    Serial.println(targetBrightness);
-  }
+    bubbleUnsort(brightnessArray,lampCount);
 }
+
 
 void updateLamps() {
   Fader *lamp = &lamps[0];
   int duration = random(1000, 2000);
   if (lamp->is_fading() == false) {
-    getLampsBrightness(brightnessArray, LAMP_NUM, 0, 255,50, 200);
+    getLampsBrightness(brightnessArray, LAMP_NUM, 0, 255,120, 120);
     Serial.println(brightnessArray[0]);
-    for (byte i = 0; i < LAMP_NUM; i++) {
+    Serial.println(brightnessArray[1]);
+    Serial.println((brightnessArray[0] + brightnessArray[1]) / 2 );
+    for (byte i = 0; i < LAMP_NUM - 1; i++) {
       Fader *lamp = &lamps[i];
-      lamp->fade(int(brightnessArray[i]), duration);
+      lamp->fade(brightnessArray[i], duration);
       lamp->update();
     }
   } else {
@@ -149,4 +132,19 @@ void bubbleSort(float A[],int len) {
     } //end for
     n=newn;
   } while(n>1);
+}
+
+void bubbleUnsort(int *list, int length)
+{
+ for (int a=length-1; a>0; a--)
+ {
+   int r = random(a+1);
+   //int r = rand_range(a+1);
+   if (r != a)
+   {
+     int temp = list[a];
+     list[a] = list[r];
+     list[r] = temp;
+   }
+ }
 }
