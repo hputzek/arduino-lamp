@@ -1,48 +1,37 @@
 #include <Arduino.h>
-#include <FastLED.h>
 #include <Fader.h>
+#include <Dimmer.h>
 
-// How many leds in your strip?
-#define NUM_LEDS 15
 #define DATA_PIN 3
-#define BRIGHTNESS 200
 
 // lamp setup
-#define LAMP_NUM 15
+#define LAMP_NUM 4
 
-
-void setLed(byte realLedNum, byte brightness);
 void lampCallback(byte id, uint8_t brightness);
 void getLampsBrightness(int *brightnessArray, byte lampCount, int loverBoundary, int upperBoundary, int spread, int targetBrightness);
 void updateLamps();
 void bubbleSort(float A[],int len);
 void bubbleUnsort(int *list, int length);
 
-// Define the array of leds
-CRGB leds[NUM_LEDS];
 
 Fader lamps[LAMP_NUM] = {
   Fader(1,lampCallback),
   Fader(2,lampCallback),
   Fader(3,lampCallback),
-  Fader(4,lampCallback),
-  Fader(5,lampCallback),
-  Fader(6,lampCallback),
-  Fader(7,lampCallback),
-  Fader(8,lampCallback),
-  Fader(9,lampCallback),
-  Fader(10,lampCallback),
-  Fader(11,lampCallback),
-  Fader(12,lampCallback),
-  Fader(13,lampCallback),
-  Fader(14,lampCallback),
-  Fader(15,lampCallback)
+  Fader(4,lampCallback)
 };
 
-int brightnessArray[14];
+Dimmer dimmers[LAMP_NUM] = {
+  Dimmer(7, DIMMER_NORMAL, 1.5, 50),
+  Dimmer(8, DIMMER_NORMAL, 1.5, 50),
+  Dimmer(9, DIMMER_NORMAL, 1.5, 50),
+  Dimmer(10, DIMMER_NORMAL, 1.5, 50)
+};
+
+int brightnessArray[LAMP_NUM];
 
 void lampCallback(byte id, uint8_t brightness){
-	setLed(id, brightness);
+	dimmers[id - 1].set(brightness);
 }
 
 void getLampsBrightness(int *brightnessArray, byte lampCount, int lowerBoundary, int upperBoundary,int spread, int targetBrightness) {
@@ -54,7 +43,7 @@ void getLampsBrightness(int *brightnessArray, byte lampCount, int lowerBoundary,
     }
 
     for (int i = 0; i <= loopCount; i += 2) {
-      int randomValue = random8(spread / 2, spread);
+      int randomValue = random(spread / 2, spread);
       int upperOverflow = (targetBrightness + randomValue) - upperBoundary;
       int lowerOverflow = (targetBrightness -  randomValue) + lowerBoundary;
 
@@ -75,12 +64,14 @@ void getLampsBrightness(int *brightnessArray, byte lampCount, int lowerBoundary,
 
 void updateLamps() {
   Fader *lamp = &lamps[0];
-  int duration = random(1000, 2000);
+  int duration = random(3000, 7000);
   if (lamp->is_fading() == false) {
-    getLampsBrightness(brightnessArray, LAMP_NUM, 0, 255,120, 120);
+    getLampsBrightness(brightnessArray, LAMP_NUM, 0, 100,5, 5);
     Serial.println(brightnessArray[0]);
     Serial.println(brightnessArray[1]);
-    Serial.println((brightnessArray[0] + brightnessArray[1]) / 2 );
+    Serial.println((brightnessArray[0] + brightnessArray[1]) /2 );
+    Serial.println("---");
+
     for (byte i = 0; i < LAMP_NUM - 1; i++) {
       Fader *lamp = &lamps[i];
       lamp->fade(brightnessArray[i], duration);
@@ -98,22 +89,13 @@ void updateLamps() {
 
 void setup() {
 	Serial.begin(115200);
-	FastLED.addLeds<WS2811, DATA_PIN, RGB>(leds, NUM_LEDS);
-	LEDS.setBrightness(BRIGHTNESS);
+  for(int i = 0; i < sizeof(dimmers) / sizeof(Dimmer); i++) {
+    dimmers[i].begin();
+  }
 }
 
 void loop() {
 	updateLamps();
-	FastLED.show();
-}
-
-void setLed(byte realLedNum, byte brightness){
-	byte ledNum = 0;
-	byte colorNum = 0;
-	float tool =  (realLedNum-1) /3;
-    ledNum = byte(tool+.5);
-    colorNum = (realLedNum-1) % 3;
-    leds[ledNum][colorNum] = brightness;
 }
 
 void bubbleSort(float A[],int len) {
