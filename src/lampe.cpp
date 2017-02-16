@@ -1,11 +1,50 @@
-#include <Arduino.h>
-#include <Fader.h>
-#include <Dimmer.h>
+#include <ESP8266WiFi.h>
+#include <ESP8266mDNS.h>
+#include <WiFiUdp.h>
+#include <ArduinoOTA.h>
+#include <PubSubClient.h>
+#include <hw_timer.h>
 
-#define DATA_PIN 3
+#include <Fader.h>
+
+// declarations
+void mqttCallback(char* topic, byte* payload, unsigned int length);
+void setupMQTTClient();
+void zcDetectISR();
+void dimTimerISR();
+
+
+byte fade = 1;
+byte state = 1;
+byte tarBrightness = 10;
+byte curBrightness = 0;
+byte zcState = 0; // 0 = ready; 1 = processing;
+
+
+// OTHER SETTINGS
+const byte mqttDebug = 1;
+const byte zcPin = 12;
+const byte outPin = 13;
 
 // lamp setup
 #define LAMP_NUM 4
+
+const char* ssid = "***REMOVED***";
+const char* password = "***REMOVED***";
+
+// MQTT Settings
+//const char* mqtt_server = "m2m.eclipse.org";
+const char* mqtt_server = "192.168.178.23";
+const int mqtt_port = 1883;
+const char* mqtt_user = "";
+const char* mqtt_password = "";
+const char* mqtt_state_topic = "office/light1/state";
+const char* mqtt_brightness_topic = "office/light1/brightness";
+const char* mqtt_fade_topic = "office/light1/fade";
+const char* pir_state_topic = "office/light1/motion";
+
+WiFiClient espClient;
+PubSubClient mqttClient(espClient);
 
 void lampCallback(byte id, uint8_t brightness);
 void getLampsBrightness(int *brightnessArray, byte lampCount, int loverBoundary, int upperBoundary, int spread, int targetBrightness);
@@ -21,17 +60,10 @@ Fader lamps[LAMP_NUM] = {
   Fader(4,lampCallback)
 };
 
-Dimmer dimmers[LAMP_NUM] = {
-  Dimmer(7, DIMMER_NORMAL, 1.5, 50),
-  Dimmer(8, DIMMER_NORMAL, 1.5, 50),
-  Dimmer(9, DIMMER_NORMAL, 1.5, 50),
-  Dimmer(10, DIMMER_NORMAL, 1.5, 50)
-};
-
 int brightnessArray[LAMP_NUM];
 
 void lampCallback(byte id, uint8_t brightness){
-	dimmers[id - 1].set(brightness);
+
 }
 
 void getLampsBrightness(int *brightnessArray, byte lampCount, int lowerBoundary, int upperBoundary,int spread, int targetBrightness) {
@@ -66,7 +98,7 @@ void updateLamps() {
   Fader *lamp = &lamps[0];
   int duration = random(3000, 7000);
   if (lamp->is_fading() == false) {
-    getLampsBrightness(brightnessArray, LAMP_NUM, 0, 100,5, 5);
+    getLampsBrightness(brightnessArray, LAMP_NUM, 0, 255, 10, 100);
     Serial.println(brightnessArray[0]);
     Serial.println(brightnessArray[1]);
     Serial.println((brightnessArray[0] + brightnessArray[1]) /2 );
@@ -88,14 +120,71 @@ void updateLamps() {
 
 
 void setup() {
-	Serial.begin(115200);
-  for(int i = 0; i < sizeof(dimmers) / sizeof(Dimmer); i++) {
-    dimmers[i].begin();
+  pinMode(zcPin, INPUT_PULLUP);
+  pinMode(outPin, OUTPUT);
+  Serial.begin(115200);
+  Serial.println("Booting");
+  WiFi.mode(WIFI_STA);
+  WiFi.begin(ssid, password);
+  while (WiFi.waitForConnectResult() != WL_CONNECTED) {
+    Serial.println("Connection Failed! Rebooting...");
+    delay(5000);
+    ESP.restart();
   }
+
+  // Port defaults to 8266
+  // ArduinoOTA.setPort(8266);
+
+  // Hostname defaults to esp8266-[ChipID]
+  // ArduinoOTA.setHostname("myesp8266");
+
+  // No authentication by default
+  // ArduinoOTA.setPassword("admin");
+
+  // Password can be set with it's md5 value as well
+  // MD5(admin) = 21232f297a57a5a743894a0e4a801fc3
+  // ArduinoOTA.setPasswordHash("21232f297a57a5a743894a0e4a801fc3");
+
+  ArduinoOTA.onStart([]() {
+    String type;
+    if (ArduinoOTA.getCommand() == U_FLASH)
+      type = "sketch";
+    else // U_SPIFFS
+      type = "filesystem";
+
+    // NOTE: if updating SPIFFS this would be the place to unmount SPIFFS using SPIFFS.end()
+    Serial.println("Start updating " + type);
+  });
+  ArduinoOTA.onEnd([]() {
+    Serial.println("\nEnd");
+  });
+  ArduinoOTA.onProgress([](unsigned int progress, unsigned int total) {
+    Serial.printf("Progress: %u%%\r", (progress / (total / 100)));
+  });
+  ArduinoOTA.onError([](ota_error_t error) {
+    Serial.printf("Error[%u]: ", error);
+    if (error == OTA_AUTH_ERROR) Serial.println("Auth Failed");
+    else if (error == OTA_BEGIN_ERROR) Serial.println("Begin Failed");
+    else if (error == OTA_CONNECT_ERROR) Serial.println("Connect Failed");
+    else if (error == OTA_RECEIVE_ERROR) Serial.println("Receive Failed");
+    else if (error == OTA_END_ERROR) Serial.println("End Failed");
+  });
+
+  ArduinoOTA.begin();
+  Serial.println("Ready");
+  Serial.print("IP address: ");
+  Serial.println(WiFi.localIP());
+  randomSeed(micros());
+  hw_timer_init(NMI_SOURCE, 0);
+  hw_timer_set_func(dimTimerISR);
+  attachInterrupt(zcPin, zcDetectISR, RISING);
 }
 
 void loop() {
-	updateLamps();
+  ArduinoOTA.handle();
+  setupMQTTClient();
+	//updateLamps();
+  mqttClient.loop();
 }
 
 void bubbleSort(float A[],int len) {
@@ -129,4 +218,159 @@ void bubbleUnsort(int *list, int length)
      list[r] = temp;
    }
  }
+}
+
+
+void setupMQTTClient() {
+   while (!mqttClient.connected()) {
+
+      int connectResult;
+      // Create a random client ID
+         String clientId = "ESP8266Client-";
+         clientId += String(random(0xffff), HEX);
+         // Attempt to connect
+      if (mqtt_server != "") {
+        Serial.print("MQTT client: ");
+        mqttClient.setServer(mqtt_server, mqtt_port);
+        mqttClient.setCallback(mqttCallback);
+        if (mqtt_user == "") {
+          connectResult = mqttClient.connect(clientId.c_str());
+        }
+        else {
+          connectResult = mqttClient.connect(clientId.c_str(), mqtt_user, mqtt_password);
+        }
+
+        if (connectResult) {
+          Serial.println("Connected");
+        }
+        else {
+          Serial.print("Failed (");
+          Serial.print(mqttClient.state());
+          Serial.println(")");
+        }
+
+        if (mqttClient.connected()) {
+          Serial.print("MQTT topic '");
+          Serial.print(mqtt_state_topic);
+          if (mqttClient.subscribe(mqtt_state_topic)) {
+            Serial.println("': Subscribed");
+          }
+          else {
+            Serial.print("': Failed");
+          }
+
+          Serial.print("MQTT topic '");
+          Serial.print(mqtt_brightness_topic);
+          if (mqttClient.subscribe(mqtt_brightness_topic)) {
+            Serial.println("': Subscribed");
+          }
+          else {
+            Serial.print("': Failed");
+          }
+
+          Serial.print("MQTT topic '");
+          Serial.print(mqtt_fade_topic);
+          if (mqttClient.subscribe(mqtt_fade_topic)) {
+            Serial.println("': Subscribed");
+          }
+          else {
+            Serial.print("': Failed");
+          }
+          delay(5000);
+       }
+    }
+  }
+}
+
+void mqttCallback(char* topic, byte* payload, unsigned int length) {
+  char c_payload[length];
+  memcpy(c_payload, payload, length);
+  c_payload[length] = '\0';
+
+  String s_topic = String(topic);
+  String s_payload = String(c_payload);
+
+  if (mqttDebug) {
+    Serial.print("MQTT in: ");
+    Serial.print(s_topic);
+    Serial.print(" = ");
+    Serial.print(s_payload);
+  }
+
+  if (s_topic == mqtt_state_topic) {
+    if (mqttDebug) { Serial.println(""); }
+
+    if (s_payload == "ON") {
+
+    }
+    else if (s_payload == "OFF") {
+
+    }
+  }
+  else if (s_topic == mqtt_fade_topic) {
+    if (mqttDebug) { Serial.println(""); }
+
+    if (s_payload == "ON") {
+
+    }
+    else if (s_payload == "OFF") {
+
+    }
+  }
+  else if (s_topic == mqtt_brightness_topic) {
+    if (mqttDebug) { Serial.println(""); }
+
+    //if (s_payload.toInt() != 0) {
+      tarBrightness = (byte)s_payload.toInt();
+    //}
+  }
+  else {
+    if (mqttDebug) { Serial.println(" [unknown message]"); }
+  }
+}
+
+void dimTimerISR() {
+    if (fade == 1) {
+      if (curBrightness > tarBrightness || (state == 0 && curBrightness > 0)) {
+        --curBrightness;
+      }
+      else if (curBrightness < tarBrightness && state == 1 && curBrightness < 255) {
+        ++curBrightness;
+      }
+    }
+    else {
+      if (state == 1) {
+        curBrightness = tarBrightness;
+      }
+      else {
+        curBrightness = 0;
+      }
+    }
+
+    if (curBrightness == 0) {
+      state = 0;
+      digitalWrite(outPin, 0);
+    }
+    else if (curBrightness == 255) {
+      state = 1;
+      digitalWrite(outPin, 1);
+    }
+    else {
+      digitalWrite(outPin, 1);
+    }
+
+    zcState = 0;
+}
+
+void zcDetectISR() {
+  if (zcState == 0) {
+    zcState = 1;
+
+    if (curBrightness < 255 && curBrightness > 0) {
+      digitalWrite(outPin, 0);
+
+      int dimDelay = 30 * (255 - curBrightness) + 400;
+      hw_timer_arm(dimDelay);
+    }
+  }
 }
