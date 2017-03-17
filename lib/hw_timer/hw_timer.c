@@ -84,6 +84,11 @@ void ICACHE_FLASH_ATTR hw_timer_init(FRC1_TIMER_SOURCE_TYPE source_type, u8 req)
     ETS_FRC1_INTR_ENABLE();
 }
 
+void  hw_timer_stop() 
+{
+    RTC_CLR_REG_MASK(FRC1_CTRL_ADDRESS,FRC1_ENABLE_TIMER);
+}
+
 //-------------------------------Test Code Below--------------------------------------
 #if 0
 void   hw_test_timer_cb(void)
@@ -115,4 +120,3 @@ NOTE:
 3 if use frc1 source, this timer can't interrupt other isr.
 
 */
-
