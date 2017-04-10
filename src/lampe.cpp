@@ -16,10 +16,10 @@ void dimTimerISR();
 
 // OTHER SETTINGS
 const byte mqttDebug = 1;
-const byte outPin1 = 13;
+const byte outPin1 = 16;
 const byte outPin2 = 14;
-const byte outPin3 = 16;
-const byte outPin4 = 5;
+const byte outPin3 = 12;
+const byte outPin4 = 13;
 bool fading_enabled = false;
 
 byte targetBrightness = 100;
@@ -81,7 +81,7 @@ void getLampsBrightness(int *brightnessArray, byte lampCount, int lowerBoundary,
       loopCount--;
     }
 
-    for (int i = 0; i <= loopCount; i += 2) {
+    for (int i = 0; i < loopCount; i += 2) {
       int randomValue = random(spread / 2, spread);
       int upperOverflow = (targetBrightness + randomValue) - upperBoundary;
       int lowerOverflow = (targetBrightness -  randomValue) + lowerBoundary;
@@ -106,13 +106,13 @@ void updateLamps() {
   if(fading_enabled) {
     int duration = random(1000, 3000);
     if (lamp->is_fading() == false) {
-      getLampsBrightness(brightnessArray, LAMP_NUM, 0, 255, 50, targetBrightness);
+      getLampsBrightness(brightnessArray, LAMP_NUM, 1, 255, 50, targetBrightness);
       Serial.println(brightnessArray[0]);
       Serial.println(brightnessArray[1]);
       Serial.println((brightnessArray[0] + brightnessArray[1]) /2 );
       Serial.println("---");
 
-      for (byte i = 0; i < LAMP_NUM - 1; i++) {
+      for (byte i = 0; i < LAMP_NUM; i++) {
         Fader *lamp = &lamps[i];
         lamp->fade(brightnessArray[i], duration);
         lamp->update();
@@ -127,6 +127,7 @@ void updateLamps() {
     for (byte i = 0; i < LAMP_NUM; i++) {
       Fader *lamp = &lamps[i];
       lamp->set_value(targetBrightness);
+      lamp->update();
     }
   }
 }

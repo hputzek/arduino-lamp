@@ -23,7 +23,7 @@
  *
  * @see https://www.arduino.cc/en/Reference/attachInterrupt for more information.
  */
-#define DIMMER_ZERO_CROSS_PIN       12
+#define DIMMER_ZERO_CROSS_PIN       4
 
 /**
  * A dimmer channel.
