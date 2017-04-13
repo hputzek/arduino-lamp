@@ -6,12 +6,12 @@
 #include <hw_timer.h>
 #include "Dimmer.h"
 #include <Fader.h>
+#include <ArduinoJson.h>
+#include "FS.h"
 
 // declarations
 void mqttCallback(char* topic, byte* payload, unsigned int length);
 void setupMQTTClient();
-void zcDetectISR();
-void dimTimerISR();
 
 
 // OTHER SETTINGS
@@ -20,9 +20,9 @@ const byte outPin1 = 16;
 const byte outPin2 = 14;
 const byte outPin3 = 12;
 const byte outPin4 = 13;
-bool fading_enabled = false;
-
-byte targetBrightness = 100;
+bool fade = false;
+byte brightness = 100;
+bool state = false;
 
 // lamp setup
 #define LAMP_NUM 4
@@ -39,16 +39,20 @@ const char* mqtt_password = "";
 const char* mqtt_state_topic = "office/light1/state";
 const char* mqtt_brightness_topic = "office/light1/brightness";
 const char* mqtt_fade_topic = "office/light1/fade";
+const char* mqtt_lamp_topic = "office/light1/#";
 const char* pir_state_topic = "office/light1/motion";
 
 WiFiClient espClient;
 PubSubClient mqttClient(espClient);
+DynamicJsonBuffer jsonSettings;
 
 void lampCallback(byte id, uint8_t brightness);
-void getLampsBrightness(int *brightnessArray, byte lampCount, int loverBoundary, int upperBoundary, int spread, int targetBrightness);
+void getLampsBrightness(int *brightnessArray, byte lampCount, int loverBoundary, int upperBoundary, int spread, int brightness);
 void updateLamps();
 void bubbleSort(float A[],int len);
 void bubbleUnsort(int *list, int length);
+bool saveSettings();
+bool loadSettings();
 
 
 Fader lamps[LAMP_NUM] = {
@@ -59,13 +63,70 @@ Fader lamps[LAMP_NUM] = {
 };
 
 Dimmer dimmers[LAMP_NUM] = {
-  Dimmer(outPin1, 50),
-  Dimmer(outPin2, 50),
-  Dimmer(outPin3, 50),
-  Dimmer(outPin4, 50),
+  Dimmer(outPin1, 0),
+  Dimmer(outPin2, 0),
+  Dimmer(outPin3, 0),
+  Dimmer(outPin4, 0),
 };
 
 int brightnessArray[LAMP_NUM];
+
+bool loadSettings(){
+  File configFile = SPIFFS.open("/config.json", "r");
+    if (!configFile) {
+      Serial.println("Failed to open config file");
+      return false;
+    }
+
+    size_t size = configFile.size();
+    if (size > 1024) {
+      Serial.println("Config file size is too large");
+      return false;
+    }
+    // Allocate a buffer to store contents of the file.
+    std::unique_ptr<char[]> buf(new char[size]);
+
+    // We don't use String here because ArduinoJson library requires the input
+    // buffer to be mutable. If you don't use ArduinoJson, you may as well
+    // use configFile.readString instead.
+    configFile.readBytes(buf.get(), size);
+
+    configFile.close();
+
+    JsonObject& settings = jsonSettings.parseObject(buf.get());
+
+
+    if (!settings.success()) {
+      Serial.println("Failed to parse config file");
+      return false;
+    }
+
+  brightness = settings["brightness"];
+  fade = settings["fade"];
+  state = settings["state"];
+}
+
+bool saveSettings() {
+  JsonObject& settings = jsonSettings.createObject();
+
+  settings["brightness"] = brightness;
+  settings["fade"] = fade;
+  settings["state"] = state;
+  File configFile = SPIFFS.open("/config.json", "w");
+
+  if (!configFile) {
+    Serial.println("Failed to open config file for writing");
+    return false;
+  }
+  settings.prettyPrintTo(Serial);
+  noInterrupts();
+  yield();
+  settings.printTo(configFile);
+  configFile.close();
+  yield();
+  interrupts();
+  return true;
+}
 
 void lampCallback(byte id, uint8_t brightness){
       yield();
@@ -73,7 +134,7 @@ void lampCallback(byte id, uint8_t brightness){
       dimmer->set(brightness);
 }
 
-void getLampsBrightness(int *brightnessArray, byte lampCount, int lowerBoundary, int upperBoundary,int spread, int targetBrightness) {
+void getLampsBrightness(int *brightnessArray, byte lampCount, int lowerBoundary, int upperBoundary,int spread, int brightness) {
     //spread /= 2;
     int loopCount = lampCount;
 
@@ -83,8 +144,8 @@ void getLampsBrightness(int *brightnessArray, byte lampCount, int lowerBoundary,
 
     for (int i = 0; i < loopCount; i += 2) {
       int randomValue = random(spread / 2, spread);
-      int upperOverflow = (targetBrightness + randomValue) - upperBoundary;
-      int lowerOverflow = (targetBrightness -  randomValue) + lowerBoundary;
+      int upperOverflow = (brightness + randomValue) - upperBoundary;
+      int lowerOverflow = (brightness -  randomValue) + lowerBoundary;
 
       if(upperOverflow < 0) {
         upperOverflow = 0;
@@ -93,8 +154,8 @@ void getLampsBrightness(int *brightnessArray, byte lampCount, int lowerBoundary,
       if (lowerOverflow > 0) {
         lowerOverflow = 0;
       }
-      brightnessArray[i] = min(targetBrightness + randomValue, upperBoundary) + lowerOverflow;
-      brightnessArray[i + 1] = max(targetBrightness - randomValue, lowerBoundary) + upperOverflow ;
+      brightnessArray[i] = min(brightness + randomValue, upperBoundary) + lowerOverflow;
+      brightnessArray[i + 1] = max(brightness - randomValue, lowerBoundary) + upperOverflow ;
     }
 
     bubbleUnsort(brightnessArray,lampCount);
@@ -103,10 +164,10 @@ void getLampsBrightness(int *brightnessArray, byte lampCount, int lowerBoundary,
 
 void updateLamps() {
   Fader *lamp = &lamps[0];
-  if(fading_enabled) {
+  if(fade) {
     int duration = random(1000, 3000);
     if (lamp->is_fading() == false) {
-      getLampsBrightness(brightnessArray, LAMP_NUM, 1, 255, 50, targetBrightness);
+      getLampsBrightness(brightnessArray, LAMP_NUM, 1, 255, 50, brightness);
       Serial.println(brightnessArray[0]);
       Serial.println(brightnessArray[1]);
       Serial.println((brightnessArray[0] + brightnessArray[1]) /2 );
@@ -126,7 +187,7 @@ void updateLamps() {
   } else {
     for (byte i = 0; i < LAMP_NUM; i++) {
       Fader *lamp = &lamps[i];
-      lamp->set_value(targetBrightness);
+      lamp->set_value(brightness);
       lamp->update();
     }
   }
@@ -137,11 +198,40 @@ void updateLamps() {
 void setup() {
   Serial.begin(115200);
   Serial.println("Booting");
+
+  Serial.println("Mounting FS...");
+
+    if (!SPIFFS.begin()) {
+      Serial.println("Failed to mount file system");
+      return;
+    }
+
+    if (!loadSettings()) {
+      Serial.println("Failed to load config");
+    } else {
+      Serial.println("Config loaded");
+    }
+
+    if (!saveSettings()) {
+      Serial.println("Failed to save config");
+    } else {
+      Serial.println("Config saved");
+    }
+
+    randomSeed(micros());
+    for (byte i = 0; i < LAMP_NUM; i++) {
+      Dimmer *dimmer= &dimmers[i];
+      dimmer->begin(0,true);
+      delay(20);
+    }
+    updateLamps();
+    yield();
+
   WiFi.mode(WIFI_STA);
   WiFi.begin(ssid, password);
   while (WiFi.waitForConnectResult() != WL_CONNECTED) {
     Serial.println("Connection Failed! Rebooting...");
-    delay(5000);
+    delay(50);
     ESP.restart();
   }
 
@@ -187,12 +277,7 @@ void setup() {
   Serial.println("Ready");
   Serial.print("IP address: ");
   Serial.println(WiFi.localIP());
-  randomSeed(micros());
-  for (byte i = 0; i < LAMP_NUM; i++) {
-    Dimmer *dimmer= &dimmers[i];
-    dimmer->begin(0,true);
-    delay(20);
-  }
+
 }
 
 void loop() {
@@ -319,27 +404,30 @@ void mqttCallback(char* topic, byte* payload, unsigned int length) {
     if (mqttDebug) { Serial.println(""); }
 
     if (s_payload == "ON") {
-
+      state = true;
     }
     else if (s_payload == "OFF") {
-
+      state = false;
     }
   }
   else if (s_topic == mqtt_fade_topic) {
     if (mqttDebug) { Serial.println(""); }
 
     if (s_payload == "ON") {
-      fading_enabled = true;
+      fade = true;
     }
     else if (s_payload == "OFF") {
-      fading_enabled = false;
+      fade = false;
     }
   }
   else if (s_topic == mqtt_brightness_topic) {
     if (mqttDebug) { Serial.println(""); }
 
     if (s_payload.toInt() != 0) {
-      targetBrightness = (byte)s_payload.toInt();
+      noInterrupts();
+      brightness = (byte)s_payload.toInt();
+      saveSettings();
+      interrupts();
     }
   }
   else {

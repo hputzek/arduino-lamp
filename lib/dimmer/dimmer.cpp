@@ -15,7 +15,7 @@ static uint8_t dimmerCount = 0;                // Number of registered dimmer ob
 // Triac pin and timing variables. Using global arrays to make ISR fast.
 static volatile uint8_t triacPinPorts[DIMMER_MAX_TRIAC]; // Triac ports for registered dimmers
 static bool triacPinMasks[DIMMER_MAX_TRIAC];           // Triac pin mask for registered dimmers
-static uint8_t triacTimes[DIMMER_MAX_TRIAC];              // Triac time for registered dimmers
+static volatile uint8_t triacTimes[DIMMER_MAX_TRIAC];              // Triac time for registered dimmers
 
 // Timer ticks since zero crossing
 static uint8_t tmrCount = 0;
