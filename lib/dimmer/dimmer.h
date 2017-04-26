@@ -106,12 +106,14 @@ class Dimmer {
      */
     void setMinimum(uint8_t value);
 
+    void restart();
+
   private:
     static bool started;
     uint8_t dimmerIndex;
     uint8_t triacPin;
     bool lampState;
-    uint8_t lampValue;
+    volatile uint8_t lampValue;
     uint8_t minValue;
     uint8_t acFreq;
 

@@ -21,6 +21,7 @@ const byte outPin2 = 14;
 const byte outPin3 = 12;
 const byte outPin4 = 13;
 bool fade = false;
+int preset = 0;
 byte brightness = 100;
 bool state = false;
 
@@ -36,6 +37,7 @@ const char* mqtt_server = "192.168.178.23";
 const int mqtt_port = 1883;
 const char* mqtt_user = "";
 const char* mqtt_password = "";
+const char* mqtt_preset_topic = "office/light1/preset";
 const char* mqtt_state_topic = "office/light1/state";
 const char* mqtt_brightness_topic = "office/light1/brightness";
 const char* mqtt_fade_topic = "office/light1/fade";
@@ -44,7 +46,7 @@ const char* pir_state_topic = "office/light1/motion";
 
 WiFiClient espClient;
 PubSubClient mqttClient(espClient);
-DynamicJsonBuffer jsonSettings;
+
 
 void lampCallback(byte id, uint8_t brightness);
 void getLampsBrightness(int *brightnessArray, byte lampCount, int loverBoundary, int upperBoundary, int spread, int brightness);
@@ -72,6 +74,7 @@ Dimmer dimmers[LAMP_NUM] = {
 int brightnessArray[LAMP_NUM];
 
 bool loadSettings(){
+  DynamicJsonBuffer jsonSettings;
   File configFile = SPIFFS.open("/config.json", "r");
     if (!configFile) {
       Serial.println("Failed to open config file");
@@ -100,31 +103,59 @@ bool loadSettings(){
       Serial.println("Failed to parse config file");
       return false;
     }
-
-  brightness = settings["brightness"];
-  fade = settings["fade"];
-  state = settings["state"];
+    if (preset == 0) {
+      preset = settings["activePreset"];
+    }
+  brightness = settings["presets"][String(preset)]["brightness"];
+  fade = settings["presets"][String(preset)]["fade"];
+  state = settings["presets"][String(preset)]["state"];
+  return true;
 }
 
 bool saveSettings() {
-  JsonObject& settings = jsonSettings.createObject();
+  DynamicJsonBuffer jsonSettings;
+  File configFile = SPIFFS.open("/config.json", "r");
+    if (!configFile) {
+      Serial.println("Failed to open config file");
+      return false;
+    }
 
-  settings["brightness"] = brightness;
-  settings["fade"] = fade;
-  settings["state"] = state;
-  File configFile = SPIFFS.open("/config.json", "w");
+    size_t size = configFile.size();
+    if (size > 1024) {
+      Serial.println("Config file size is too large");
+      return false;
+    }
+    // Allocate a buffer to store contents of the file.
+    std::unique_ptr<char[]> buf(new char[size]);
 
-  if (!configFile) {
+    // We don't use String here because ArduinoJson library requires the input
+    // buffer to be mutable. If you don't use ArduinoJson, you may as well
+    // use configFile.readString instead.
+    configFile.readBytes(buf.get(), size);
+
+    configFile.close();
+
+    JsonObject& settings = jsonSettings.parseObject(buf.get());
+  settings["activePreset"] = preset;
+  if(!settings["presets"]) {
+     settings.createNestedObject("presets");
+  }
+  JsonObject& presets = settings["presets"];
+  JsonObject& currentPreset =  presets.createNestedObject(String(preset));
+
+  settings["presets"][String(preset)]["brightness"] = brightness;
+  settings["presets"][String(preset)]["fade"] = fade;
+  settings["presets"][String(preset)]["state"] = state;
+  File configFileSave = SPIFFS.open("/config.json", "w");
+
+  if (!configFileSave) {
     Serial.println("Failed to open config file for writing");
     return false;
   }
   settings.prettyPrintTo(Serial);
-  noInterrupts();
-  yield();
-  settings.printTo(configFile);
+  settings.printTo(configFileSave);
+
   configFile.close();
-  yield();
-  interrupts();
   return true;
 }
 
@@ -132,6 +163,7 @@ void lampCallback(byte id, uint8_t brightness){
       yield();
       Dimmer *dimmer= &dimmers[id-1];
       dimmer->set(brightness);
+      yield();
 }
 
 void getLampsBrightness(int *brightnessArray, byte lampCount, int lowerBoundary, int upperBoundary,int spread, int brightness) {
@@ -212,28 +244,24 @@ void setup() {
       Serial.println("Config loaded");
     }
 
-    if (!saveSettings()) {
-      Serial.println("Failed to save config");
-    } else {
-      Serial.println("Config saved");
-    }
-
     randomSeed(micros());
     for (byte i = 0; i < LAMP_NUM; i++) {
       Dimmer *dimmer= &dimmers[i];
-      dimmer->begin(0,true);
-      delay(20);
+      dimmer->begin(brightness,true);
+      updateLamps();
+      delay(500);
+      yield();
     }
-    updateLamps();
-    yield();
-
+  yield();
+  noInterrupts();
   WiFi.mode(WIFI_STA);
   WiFi.begin(ssid, password);
   while (WiFi.waitForConnectResult() != WL_CONNECTED) {
     Serial.println("Connection Failed! Rebooting...");
-    delay(50);
+    yield();
     ESP.restart();
   }
+  interrupts();
 
   // Port defaults to 8266
   // ArduinoOTA.setPort(8266);
@@ -273,7 +301,7 @@ void setup() {
    else if (error == OTA_END_ERROR) Serial.println("End Failed");
  });
 
-  ArduinoOTA.begin();
+  //ArduinoOTA.begin();
   Serial.println("Ready");
   Serial.print("IP address: ");
   Serial.println(WiFi.localIP());
@@ -281,13 +309,13 @@ void setup() {
 }
 
 void loop() {
-  yield();
-  ArduinoOTA.handle();
+  //ArduinoOTA.handle();
   yield();
   setupMQTTClient();
   mqttClient.loop();
   yield();
   updateLamps();
+  yield();
 }
 
 void bubbleSort(float A[],int len) {
@@ -326,7 +354,7 @@ void bubbleUnsort(int *list, int length)
 
 void setupMQTTClient() {
    while (!mqttClient.connected()) {
-
+      yield();
       int connectResult;
       // Create a random client ID
          String clientId = "ESP8266Client-";
@@ -379,7 +407,15 @@ void setupMQTTClient() {
           else {
             Serial.print("': Failed");
           }
-          yield();
+
+          Serial.print("MQTT topic '");
+          Serial.print(mqtt_preset_topic);
+          if (mqttClient.subscribe(mqtt_preset_topic)) {
+            Serial.println("': Subscribed");
+          }
+          else {
+            Serial.print("': Failed");
+          }
        }
     }
   }
@@ -424,13 +460,27 @@ void mqttCallback(char* topic, byte* payload, unsigned int length) {
     if (mqttDebug) { Serial.println(""); }
 
     if (s_payload.toInt() != 0) {
-      noInterrupts();
       brightness = (byte)s_payload.toInt();
-      saveSettings();
-      interrupts();
+    }
+  }
+  else if (s_topic == mqtt_preset_topic) {
+    if (mqttDebug) { Serial.println(""); }
+
+    if (s_payload.toInt() != 0) {
+      preset = constrain(s_payload.toInt(),1,5);
+      hw_timer_stop();
+      loadSettings();
+      Dimmer *dimmer = &dimmers[0];
+      dimmer->restart();
     }
   }
   else {
     if (mqttDebug) { Serial.println(" [unknown message]"); }
   }
+  hw_timer_stop();
+//  noInterrupts();
+  saveSettings();
+//  interrupts();
+ Dimmer *dimmer = &dimmers[0];
+ dimmer->restart();
 }

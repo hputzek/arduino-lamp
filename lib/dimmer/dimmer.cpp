@@ -56,9 +56,6 @@ void callZeroCross() {
       digitalWrite(triacPinPorts[i], HIGH);
     }
   }
-  hw_timer_stop();
-  hw_timer_init(NMI_SOURCE, 1);
-  hw_timer_arm(39);
 }
 
 
@@ -92,9 +89,16 @@ void Dimmer::begin(uint8_t value, bool on) {
     // attach interrupt and setup timer
     hw_timer_init(NMI_SOURCE, 1);
     hw_timer_set_func(dimmerISR);
+    hw_timer_arm(39);
     attachInterrupt(DIMMER_ZERO_CROSS_PIN, callZeroCross, RISING);
     started = true;
   }
+}
+
+void Dimmer::restart() {
+  hw_timer_init(NMI_SOURCE, 1);
+  hw_timer_set_func(dimmerISR);
+  hw_timer_arm(39);
 }
 
 void Dimmer::off() {
@@ -127,7 +131,7 @@ void Dimmer::set(uint8_t value) {
   }
 
   if (value != lampValue) {
-    lampValue = value;
+    lampValue = 255 - value;
   }
 }
 
