@@ -134,6 +134,8 @@ Vue.prototype.$prompt = MessageBox.prompt;
 Vue.prototype.$notify = Notification;
 Vue.prototype.$message = Message;
 import 'element-ui/lib/theme-default/index.css'
+import VueWebsocket from "vue-websocket"
+//Vue.use(VueWebsocket);
 import App from './App.vue'
 
 new Vue({
