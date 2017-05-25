@@ -4,3 +4,9 @@
 .piolibdeps
 .gitconfig
 settings.h
+
+.DS_Store
+node_modules/
+dist/
+npm-debug.log
+.idea
