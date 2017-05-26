@@ -79,7 +79,47 @@
                 }
             },
         },
-        methods: {}
+        watch: {
+            'lampState': {
+                handler: function (val, oldVal) {
+                    this.$socket.emit('message', JSON.stringify(this.lampState));
+                },
+                deep: true
+            }
+        },
+        methods: {},
+        socket: {
+            // Prefix for event names
+            // prefix: "/counter/",
+
+            // If you set `namespace`, it will create a new socket connection to the namespace instead of `/`
+            // namespace: "/counter",
+
+            events: {
+
+                // Similar as this.$socket.on("changed", (msg) => { ... });
+                // If you set `prefix` to `/counter/`, the event name will be `/counter/changed`
+                //
+                message: function(val){
+                    console.log(val);
+                    console.log('test');
+                },
+
+                 connect() {
+                 console.log("Websocket connected to " + this.$socket.nsp);
+                 },
+
+                 disconnect() {
+                 console.log("Websocket disconnected from " + this.$socket.nsp);
+                 },
+
+                 error(err) {
+                 console.error("Websocket error!", err);
+                 }
+
+
+            }
+        }
     }
 </script>
 

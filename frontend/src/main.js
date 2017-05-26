@@ -135,7 +135,7 @@ Vue.use(Slider);
 // Vue.prototype.$message = Message;
 import 'element-ui/lib/theme-default/index.css'
 import VueWebsocket from "vue-websocket"
-//Vue.use(VueWebsocket);
+Vue.use(VueWebsocket,"http://127.0.0.1:3000");
 import App from './App.vue'
 
 new Vue({
