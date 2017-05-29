@@ -4,13 +4,13 @@
             <h1>Lamp</h1>
             <el-form ref="form" :model="lampState">
                 <el-form-item label="Preset">
-                    <el-button-group>
-                        <el-button type="primary">1</el-button>
-                        <el-button type="primary">2</el-button>
-                        <el-button type="primary">3</el-button>
-                        <el-button type="primary">4</el-button>
-                        <el-button type="primary">5</el-button>
-                    </el-button-group>
+                    <el-radio-group size="large" v-model="lampState.activePreset">
+                        <el-radio-button label="1"></el-radio-button>
+                        <el-radio-button label="2"></el-radio-button>
+                        <el-radio-button label="3"></el-radio-button>
+                        <el-radio-button label="4"></el-radio-button>
+                        <el-radio-button label="5"></el-radio-button>
+                    </el-radio-group>
                 </el-form-item>
                 <el-form-item label="Lamp state">
                     <el-switch
@@ -42,11 +42,31 @@
                     activePreset: 1,
                     presets: {
                         1: {
-                            brightness: 10,
+                            brightness: 0,
+                            spread: 0,
+                            fade: false
+                        },
+                        2: {
+                            brightness: 0,
+                            spread: 0,
+                            fade: false
+                        },
+                        3: {
+                            brightness: 0,
+                            spread: 0,
+                            fade: false
+                        },
+                        4: {
+                            brightness: 0,
+                            spread: 0,
+                            fade: false
+                        },
+                        5: {
+                            brightness: 0,
                             spread: 0,
                             fade: false
                         }
-                    }
+                    },
                 }
             }
         },
@@ -80,14 +100,27 @@
             },
         },
         watch: {
-            'lampState': {
-                handler: function (val, oldVal) {
-                    this.$socket.emit('message', JSON.stringify(this.lampState));
-                },
-                deep: true
+           'lampState.state': function(val) {
+               this.$socket.emit('state', val);
+            },
+            'lampState.activePreset': function(val) {
+                this.$socket.emit('activePreset', val);
+            },
+            brightness: function(val) {
+                this.$socket.emit('brightness', val);
+            },
+            spread: function(val) {
+                this.$socket.emit('spread', val);
+            },
+            fade: function(val) {
+                this.$socket.emit('fade', val);
             }
         },
-        methods: {},
+        methods: {
+            setActiveState(e) {
+                this.lampState.activePreset = e.target.innerText;
+            }
+        },
         socket: {
             // Prefix for event names
             // prefix: "/counter/",
@@ -100,9 +133,12 @@
                 // Similar as this.$socket.on("changed", (msg) => { ... });
                 // If you set `prefix` to `/counter/`, the event name will be `/counter/changed`
                 //
-                message: function(val){
+                state: function(val){
                     console.log(val);
-                    console.log('test');
+                },
+
+                fade: function (val) {
+                  console.log(val);
                 },
 
                  connect() {
