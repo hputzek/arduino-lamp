@@ -1,68 +1,37 @@
-import Vue from 'vue'
-import {
-    // Pagination,
-    // Dialog,
-    // Autocomplete,
-    // Dropdown,
-    // DropdownMenu,
-    // DropdownItem,
-    // Menu,
-    // Submenu,
-    // MenuItem,
-    // MenuItemGroup,
-    // Input,
-    // InputNumber,
-    // Radio,
-     RadioGroup,
-     RadioButton,
-    // Checkbox,
-    // CheckboxGroup,
-    Switch,
-    // Select,
-    // Option,
-    // OptionGroup,
-    Button,
-    ButtonGroup,
-    // Table,
-    // TableColumn,
-    // DatePicker,
-    // TimeSelect,
-    // TimePicker,
-    // Popover,
-    // Tooltip,
-    // Breadcrumb,
-    // BreadcrumbItem,
-    Form,
-    FormItem,
-    // Tabs,
-    // TabPane,
-    // Tag,
-    // Tree,
-    // Alert,
-    Slider,
-    // Icon,
-    // Row,
-    // Col,
-    // Upload,
-    // Progress,
-    // Spinner,
-    // Badge,
-    // Card,
-    // Rate,
-    // Steps,
-    // Step,
-    // Carousel,
-    // Scrollbar,
-    // CarouselItem,
-    // Collapse,
-    // CollapseItem,
-    // Cascader,
-    // ColorPicker,
-    // Loading,
-    // MessageBox,
-    // Message,
-    // Notification
-} from 'element-ui'
+import Vue from "vue";
+import {Button, ButtonGroup, Form, FormItem, RadioButton, RadioGroup, Slider, Switch} from "element-ui";
+// Vue.use(Icon);
+// Vue.use(Row);
+// Vue.use(Col);
+// Vue.use(Upload);
+// Vue.use(Progress);
+// Vue.use(Spinner);
+// Vue.use(Badge);
+// Vue.use(Card);
+// Vue.use(Rate);
+// Vue.use(Steps);
+// Vue.use(Step);
+// Vue.use(Carousel);
+// Vue.use(Scrollbar);
+// Vue.use(CarouselItem);
+// Vue.use(Collapse);
+// Vue.use(CollapseItem);
+// Vue.use(Cascader);
+// Vue.use(ColorPicker);
+// Vue.use(Notification);
+//
+// Vue.use(Loading.directive);
+//
+// Vue.prototype.$loading = Loading.service;
+// Vue.prototype.$msgbox = MessageBox;
+// Vue.prototype.$alert = MessageBox.alert;
+// Vue.prototype.$confirm = MessageBox.confirm;
+// Vue.prototype.$prompt = MessageBox.prompt;
+// Vue.prototype.$notify = Notification;
+// Vue.prototype.$message = Message;
+import "element-ui/lib/theme-default/index.css";
+import VueWebsocket from "vue-websocket";
+import App from "./App.vue";
 
 // Vue.use(Pagination);
 // Vue.use(Dialog);
@@ -104,39 +73,7 @@ Vue.use(FormItem);
 // Vue.use(Tree);
 // Vue.use(Alert);
 Vue.use(Slider);
-// Vue.use(Icon);
-// Vue.use(Row);
-// Vue.use(Col);
-// Vue.use(Upload);
-// Vue.use(Progress);
-// Vue.use(Spinner);
-// Vue.use(Badge);
-// Vue.use(Card);
-// Vue.use(Rate);
-// Vue.use(Steps);
-// Vue.use(Step);
-// Vue.use(Carousel);
-// Vue.use(Scrollbar);
-// Vue.use(CarouselItem);
-// Vue.use(Collapse);
-// Vue.use(CollapseItem);
-// Vue.use(Cascader);
-// Vue.use(ColorPicker);
-// Vue.use(Notification);
-//
-// Vue.use(Loading.directive);
-//
-// Vue.prototype.$loading = Loading.service;
-// Vue.prototype.$msgbox = MessageBox;
-// Vue.prototype.$alert = MessageBox.alert;
-// Vue.prototype.$confirm = MessageBox.confirm;
-// Vue.prototype.$prompt = MessageBox.prompt;
-// Vue.prototype.$notify = Notification;
-// Vue.prototype.$message = Message;
-import 'element-ui/lib/theme-default/index.css'
-import VueWebsocket from "vue-websocket"
 Vue.use(VueWebsocket,"http://127.0.0.1:3000");
-import App from './App.vue'
 
 new Vue({
   el: '#app',
