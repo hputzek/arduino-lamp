@@ -1,5 +1,5 @@
 import Vue from "vue";
-import {Button, ButtonGroup, Form, FormItem, RadioButton, RadioGroup, Slider, Switch} from "element-ui";
+import {Button, ButtonGroup, Form, FormItem, RadioButton, RadioGroup, Slider, Switch, Notification, Tabs, TabPane} from "element-ui";
 // Vue.use(Icon);
 // Vue.use(Row);
 // Vue.use(Col);
@@ -27,7 +27,7 @@ import {Button, ButtonGroup, Form, FormItem, RadioButton, RadioGroup, Slider, Sw
 // Vue.prototype.$alert = MessageBox.alert;
 // Vue.prototype.$confirm = MessageBox.confirm;
 // Vue.prototype.$prompt = MessageBox.prompt;
-// Vue.prototype.$notify = Notification;
+ Vue.prototype.$notify = Notification;
 // Vue.prototype.$message = Message;
 import "element-ui/lib/theme-default/index.css";
 import VueWebsocket from "vue-websocket";
@@ -67,8 +67,8 @@ Vue.use(ButtonGroup);
 // Vue.use(BreadcrumbItem);
 Vue.use(Form);
 Vue.use(FormItem);
-// Vue.use(Tabs);
-// Vue.use(TabPane);
+Vue.use(Tabs);
+Vue.use(TabPane);
 // Vue.use(Tag);
 // Vue.use(Tree);
 // Vue.use(Alert);

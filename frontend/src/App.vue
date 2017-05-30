@@ -1,34 +1,39 @@
 <template>
     <div id="app" style="max-width: 320px; margin: 0 auto;">
         <div class="container">
-            <h1>Lamp</h1>
-            <el-form ref="form" :model="lampState">
-                <el-form-item label="Preset">
-                    <el-radio-group size="large" v-model="lampState.activePreset">
-                        <el-radio-button label="1"></el-radio-button>
-                        <el-radio-button label="2"></el-radio-button>
-                        <el-radio-button label="3"></el-radio-button>
-                        <el-radio-button label="4"></el-radio-button>
-                        <el-radio-button label="5"></el-radio-button>
-                    </el-radio-group>
-                </el-form-item>
-                <el-form-item label="Lamp state">
-                    <el-switch
-                            v-model="lampState.state">
-                    </el-switch>
-                </el-form-item>
-                <el-form-item label="Brightness">
-                    <el-slider v-model="brightness"></el-slider>
-                </el-form-item>
-                <el-form-item label="Spread">
-                    <el-slider v-model="spread"></el-slider>
-                </el-form-item>
-                <el-form-item label="Fading">
-                    <el-switch
-                            v-model="fade">
-                    </el-switch>
-                </el-form-item>
-            </el-form>
+            <div style="float:right" v-bind:class="{ 'led-blue': websocketConnected, 'led-red': !websocketConnected }"></div>
+            <el-tabs name="tabs" value="first">
+                <el-tab-pane label="Status" name="first">
+                    <el-form ref="form" class="settings-form">
+                        <el-form-item label="Preset">
+                            <el-radio-group size="large" v-model="lampState.activePreset">
+                                <el-radio-button label="1"></el-radio-button>
+                                <el-radio-button label="2"></el-radio-button>
+                                <el-radio-button label="3"></el-radio-button>
+                                <el-radio-button label="4"></el-radio-button>
+                                <el-radio-button label="5"></el-radio-button>
+                            </el-radio-group>
+                        </el-form-item>
+                        <el-form-item label="Lamp state">
+                            <el-switch
+                                    v-model="lampState.state">
+                            </el-switch>
+                        </el-form-item>
+                        <el-form-item label="Brightness">
+                            <el-slider v-model="brightness"></el-slider>
+                        </el-form-item>
+                        <el-form-item label="Spread">
+                            <el-slider v-model="spread"></el-slider>
+                        </el-form-item>
+                        <el-form-item label="Fading">
+                            <el-switch
+                                    v-model="fade">
+                            </el-switch>
+                        </el-form-item>
+                    </el-form>
+                </el-tab-pane>
+                <el-tab-pane label="Settings" name="second">Config</el-tab-pane>
+            </el-tabs>
         </div>
     </div>
 </template>
@@ -37,6 +42,7 @@
     export default {
         data () {
             return {
+                websocketConnected: false,
                 lampState: {
                     state: 0,
                     activePreset: 1,
@@ -133,8 +139,11 @@
                 // Similar as this.$socket.on("changed", (msg) => { ... });
                 // If you set `prefix` to `/counter/`, the event name will be `/counter/changed`
                 //
-                state: function(val){
-                    console.log(val);
+                setState: function(val){
+                    let newState = JSON.parse(val);
+                    if(newState !== null && typeof newState === 'object') {
+                        this.lampState = Object.assign(this.lampState,newState);
+                    }
                 },
 
                 fade: function (val) {
@@ -142,10 +151,16 @@
                 },
 
                  connect() {
-                 console.log("Websocket connected to " + this.$socket.nsp);
+                    this.websocketConnected = true;
+                    console.log("Websocket connected to " + this.$socket.nsp);
                  },
 
                  disconnect() {
+                     this.websocketConnected = false;
+                     this.$notify.info({
+                         title: 'Connection lost',
+                         message: 'Oh no, Connection to lamp is gone :-('
+                     });
                  console.log("Websocket disconnected from " + this.$socket.nsp);
                  },
 
@@ -160,26 +175,39 @@
 </script>
 
 <style>
-    body {
-        font-family: Helvetica, sans-serif;
-        background: radial-gradient(black 15%, transparent 16%) 0 0,
-        radial-gradient(black 15%, transparent 16%) 8px 8px,
-        radial-gradient(rgba(255, 255, 255, .1) 15%, transparent 20%) 0 1px,
-        radial-gradient(rgba(255, 255, 255, .1) 15%, transparent 20%) 8px 9px;
-        background-color: #282828;
-        background-size: 16px 16px;
-    }
 
     #app {
         background: #efefef;
     }
     .container {
-        padding: 20px;
+        padding: 15px;
+    }
+
+    .settings-form {
+        padding: 10px;
     }
 
     .el-form-item__label {
         display: block;
         float: none;
         text-align: left;
+    }
+
+    .led-red {
+        margin: 20px auto;
+        width: 12px;
+        height: 12px;
+        background-color: #940;
+        border-radius: 50%;
+        box-shadow: #000 0 -1px 7px 1px, inset #600 0 -1px 9px, #F00 0 2px 12px;
+    }
+
+    .led-blue {
+        margin: 20px auto;
+        width: 12px;
+        height: 12px;
+        background-color: #4AB;
+        border-radius: 50%;
+        box-shadow: #000 0 -1px 7px 1px, inset #006 0 -1px 9px, #06F 0 2px 14px;
     }
 </style>

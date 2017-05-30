@@ -13,6 +13,6 @@ io.sockets.on('connection', function (socket) {
     };
 
     socket.on("*",function(event,data) {
-        socket.emit(event,data);
+        io.emit(event,data);
     });
 });
