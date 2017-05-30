@@ -1,5 +1,5 @@
 import Vue from "vue";
-import {Button, ButtonGroup, Form, FormItem, RadioButton, RadioGroup, Slider, Switch, Notification, Tabs, TabPane} from "element-ui";
+import {Button, ButtonGroup, Form, FormItem, RadioButton, RadioGroup, Slider, Switch, Notification, Tabs, TabPane, Step, Steps, Input} from "element-ui";
 // Vue.use(Icon);
 // Vue.use(Row);
 // Vue.use(Col);
@@ -9,8 +9,8 @@ import {Button, ButtonGroup, Form, FormItem, RadioButton, RadioGroup, Slider, Sw
 // Vue.use(Badge);
 // Vue.use(Card);
 // Vue.use(Rate);
-// Vue.use(Steps);
-// Vue.use(Step);
+Vue.use(Steps);
+Vue.use(Step);
 // Vue.use(Carousel);
 // Vue.use(Scrollbar);
 // Vue.use(CarouselItem);
@@ -43,7 +43,7 @@ import App from "./App.vue";
 // Vue.use(Submenu);
 // Vue.use(MenuItem);
 // Vue.use(MenuItemGroup);
-// Vue.use(Input);
+Vue.use(Input);
 // Vue.use(InputNumber);
 // Vue.use(Radio);
  Vue.use(RadioGroup);
