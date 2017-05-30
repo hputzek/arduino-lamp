@@ -22,6 +22,7 @@ const byte outPin4 = 13;
 bool fade = false;
 int preset = 0;
 byte brightness = 100;
+byte spread = 50;
 bool state = false;
 
 // lamp setup
@@ -40,8 +41,7 @@ const char* mqtt_preset_topic = "office/light1/preset";
 const char* mqtt_state_topic = "office/light1/state";
 const char* mqtt_brightness_topic = "office/light1/brightness";
 const char* mqtt_fade_topic = "office/light1/fade";
-const char* mqtt_lamp_topic = "office/light1/#";
-const char* pir_state_topic = "office/light1/motion";
+const char* mqtt_spread_topic = "office/light1/spread";
 
 WiFiClient espClient;
 PubSubClient mqttClient(espClient);
@@ -108,6 +108,7 @@ bool loadSettings(){
   brightness = settings["presets"][String(preset)]["brightness"];
   fade = settings["presets"][String(preset)]["fade"];
   state = settings["presets"][String(preset)]["state"];
+  spread = settings["presets"][String(preset)]["spread"];
   return true;
 }
 
@@ -145,6 +146,7 @@ bool saveSettings() {
   settings["presets"][String(preset)]["brightness"] = brightness;
   settings["presets"][String(preset)]["fade"] = fade;
   settings["presets"][String(preset)]["state"] = state;
+  settings["presets"][String(preset)]["spread"] = spread;
   File configFileSave = SPIFFS.open("/config.json", "w");
 
   if (!configFileSave) {
@@ -198,7 +200,7 @@ void updateLamps() {
   if(fade) {
     int duration = random(1000, 3000);
     if (lamp->is_fading() == false) {
-      getLampsBrightness(brightnessArray, LAMP_NUM, 1, 255, 50, brightness);
+      getLampsBrightness(brightnessArray, LAMP_NUM, 1, 255, spread, brightness);
       Serial.println(brightnessArray[0]);
       Serial.println(brightnessArray[1]);
       Serial.println((brightnessArray[0] + brightnessArray[1]) /2 );
@@ -257,13 +259,11 @@ void setup() {
   WiFi.begin(ssid, password);
   while (WiFi.waitForConnectResult() != WL_CONNECTED) {
     Serial.println("Connection Failed! Rebooting...");
-    yield();
     ESP.restart();
   }
   Serial.println("Ready");
   Serial.print("IP address: ");
   Serial.println(WiFi.localIP());
-
 }
 
 void loop() {
@@ -370,6 +370,11 @@ void setupMQTTClient() {
           if (mqttClient.subscribe(mqtt_preset_topic)) {
             Serial.println("': Subscribed");
           }
+          Serial.print("MQTT topic '");
+          Serial.print(mqtt_spread_topic);
+          if (mqttClient.subscribe(mqtt_spread_topic)) {
+            Serial.println("': Subscribed");
+          }
           else {
             Serial.print("': Failed");
           }
@@ -417,7 +422,7 @@ void mqttCallback(char* topic, byte* payload, unsigned int length) {
     if (mqttDebug) { Serial.println(""); }
 
     if (s_payload.toInt() != 0) {
-      brightness = (byte)s_payload.toInt();
+      brightness = map((byte)s_payload.toInt(), 1, 100, 1, 255);
     }
   }
   else if (s_topic == mqtt_preset_topic) {
@@ -431,13 +436,18 @@ void mqttCallback(char* topic, byte* payload, unsigned int length) {
       dimmer->restart();
     }
   }
+  else if (s_topic == mqtt_spread_topic) {
+    if (mqttDebug) { Serial.println(""); }
+
+    if (s_payload.toInt() != 0) {
+      spread = constrain((byte)s_payload.toInt(), 0, 100);
+    }
+  }
   else {
     if (mqttDebug) { Serial.println(" [unknown message]"); }
   }
   hw_timer_stop();
-//  noInterrupts();
   saveSettings();
-//  interrupts();
  Dimmer *dimmer = &dimmers[0];
  dimmer->restart();
 }
