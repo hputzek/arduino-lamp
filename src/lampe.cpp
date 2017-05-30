@@ -1,3 +1,4 @@
+
 #include <ESP8266WiFi.h>
 #include <WiFiUdp.h>
 #include <PubSubClient.h>
@@ -5,10 +6,13 @@
 #include "Dimmer.h"
 #include <Fader.h>
 #include <ArduinoJson.h>
+#include <WebSocketsServer.h>
+#include <Hash.h>
 #include "FS.h"
 #include "settings.h"
 
 // declarations
+void webSocketEvent(uint8_t num, WStype_t type, uint8_t * payload, size_t lenght);
 void mqttCallback(char* topic, byte* payload, unsigned int length);
 void setupMQTTClient();
 
@@ -45,6 +49,8 @@ const char* mqtt_spread_topic = "office/light1/spread";
 
 WiFiClient espClient;
 PubSubClient mqttClient(espClient);
+
+WebSocketsServer webSocket = WebSocketsServer(80);
 
 
 void lampCallback(byte id, uint8_t brightness);
@@ -264,9 +270,13 @@ void setup() {
   Serial.println("Ready");
   Serial.print("IP address: ");
   Serial.println(WiFi.localIP());
+
+  webSocket.begin();
+  webSocket.onEvent(webSocketEvent);
 }
 
 void loop() {
+  webSocket.loop();
   yield();
   setupMQTTClient();
   mqttClient.loop();
@@ -450,4 +460,39 @@ void mqttCallback(char* topic, byte* payload, unsigned int length) {
   saveSettings();
  Dimmer *dimmer = &dimmers[0];
  dimmer->restart();
+}
+
+void webSocketEvent(uint8_t num, WStype_t type, uint8_t * payload, size_t lenght) {
+
+    switch(type) {
+        case WStype_DISCONNECTED:
+            Serial.printf("[%u] Disconnected!\n", num);
+            break;
+        case WStype_CONNECTED:
+            {
+                IPAddress ip = webSocket.remoteIP(num);
+                Serial.printf("[%u] Connected from %d.%d.%d.%d url: %s\n", num, ip[0], ip[1], ip[2], ip[3], payload);
+
+        				// send message to client
+        				webSocket.sendTXT(num, "3");
+            }
+            break;
+        case WStype_TEXT:
+            Serial.printf("[%u] get Text: %s\n", num, payload);
+
+            // send message to client
+            // webSocket.sendTXT(num, "message here");
+
+            // send data to all connected clients
+            // webSocket.broadcastTXT("message here");
+            break;
+        case WStype_BIN:
+            Serial.printf("[%u] get binary lenght: %u\n", num, lenght);
+            hexdump(payload, lenght);
+
+            // send message to client
+            // webSocket.sendBIN(num, payload, lenght);
+            break;
+    }
+
 }
