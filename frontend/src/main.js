@@ -1,3 +1,5 @@
+'use strict'
+
 import Vue from "vue";
 import {Button, ButtonGroup, Form, FormItem, RadioButton, RadioGroup, Slider, Switch, Notification, Tabs, TabPane, Step, Steps, Input} from "element-ui";
 // Vue.use(Icon);
@@ -73,7 +75,22 @@ Vue.use(TabPane);
 // Vue.use(Tree);
 // Vue.use(Alert);
 Vue.use(Slider);
-Vue.use(VueWebsocket,"http://127.0.0.1:3000");
+import VueRemote from 'vue-remote';
+export const bus = new Vue();
+Vue.use(
+    VueRemote,
+    {
+        secure: false,
+        host: "localhost",
+        port: 8080,
+        openHandler: function() {
+            bus.$emit('websocketConnected', true);
+        },
+        closeHandler: function() {
+            bus.$emit('websocketConnected', false);
+        }
+    }
+)
 
 new Vue({
   el: '#app',

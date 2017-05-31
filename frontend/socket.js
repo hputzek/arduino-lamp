@@ -1,18 +1,18 @@
-let io = require('socket.io').listen(3000);
+// testServer.js
 
-io.sockets.on('connection', function (socket) {
-    console.log("Someone just connected!");
+const Server = require('vue-remote/server');
 
-    // Echo back messages from the client
-    let onevent = socket.onevent;
-    socket.onevent = function (packet) {
-        let args = packet.data || [];
-        onevent.call (this, packet);    // original call
-        packet.data = ["*"].concat(args);
-        onevent.call(this, packet);      // additional call to catch-all
+function messageHandler(message) {
+    // message = {
+    //    identifier: "trigger",
+    //    arguments: [...]
+    // }
+
+
+    return {
+        identifier: "trigger",
+        data: "Handled Message"
     };
+}
 
-    socket.on("*",function(event,data) {
-        io.emit(event,data);
-    });
-});
+let socketServer = Server(messageHandler);

@@ -66,6 +66,7 @@
 </template>
 
 <script>
+    import { bus } from './main.js';
     export default {
         data () {
             return {
@@ -144,19 +145,19 @@
         },
         watch: {
            'lampState.state': function(val) {
-               this.$socket.emit('state', val);
+               this.$remote.$emit('state', String(val));
             },
             'lampState.activePreset': function(val) {
-                this.$socket.emit('activePreset', val);
+                this.$remote.$emit('activePreset', String(val));
             },
             brightness: function(val) {
-                this.$socket.emit('brightness', val);
+                this.$remote.$emit('brightness', String(val));
             },
             spread: function(val) {
-                this.$socket.emit('spread', val);
+                this.$remote.$emit('spread', String(val));
             },
             fade: function(val) {
-                this.$socket.emit('fade', val);
+                this.$remote.$emit('fade', String(val));
             }
         },
         methods: {
@@ -169,49 +170,24 @@
                 console.log(e);
             }
         },
-        socket: {
-            // Prefix for event names
-            // prefix: "/counter/",
-
-            // If you set `namespace`, it will create a new socket connection to the namespace instead of `/`
-            // namespace: "/counter",
-
-            events: {
-
-                // Similar as this.$socket.on("changed", (msg) => { ... });
-                // If you set `prefix` to `/counter/`, the event name will be `/counter/changed`
-                //
-                setState: function(val){
-                    let newState = JSON.parse(val);
-                    if(newState !== null && typeof newState === 'object') {
-                        this.lampState = Object.assign(this.lampState,newState);
-                    }
-                },
-
-                fade: function (val) {
-                  console.log(val);
-                },
-
-                 connect() {
-                    this.websocketConnected = true;
-                    console.log("Websocket connected to " + this.$socket.nsp);
-                 },
-
-                 disconnect() {
-                     this.websocketConnected = false;
-                     this.$notify.info({
-                         title: 'Connection lost',
-                         message: 'Oh no, Connection to lamp is gone :-('
-                     });
-                 console.log("Websocket disconnected from " + this.$socket.nsp);
-                 },
-
-                 error(err) {
-                 console.error("Websocket error!", err);
-                 }
-
-
-            }
+        remote: {
+            setState: function(val){
+                let newState = JSON.parse(val);
+                if(newState !== null && typeof newState === 'object') {
+                    this.lampState = Object.assign(this.lampState,newState);
+                }
+            },
+        },
+        created: function() {
+            bus.$on('websocketConnected', function(state){
+                this.websocketConnected = state;
+                if(!state) {
+                    this.$notify.info({
+                        title: 'Connection lost',
+                        message: 'Oh no, Connection to lamp is gone :-('
+                    });
+                }
+            }.bind(this));
         }
     }
 </script>
