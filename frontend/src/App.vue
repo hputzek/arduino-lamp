@@ -1,8 +1,9 @@
 <template>
     <div id="app" style="max-width: 480px; margin: 0 auto;">
+        <loader v-if="!websocketConnected"></loader>
         <div class="container">
             <div style="float:right" v-bind:class="{ 'led-blue': websocketConnected, 'led-red': !websocketConnected }"></div>
-            <el-tabs name="tabs" value="first">
+            <el-tabs v-if="websocketConnected" name="tabs" value="first">
                 <el-tab-pane label="Status" name="first">
                     <el-form ref="form" class="settings-form">
                         <el-form-item label="Preset">
@@ -40,7 +41,7 @@
                     </el-steps>
                     <ul v-if="setup.step===1" class="wlans">
                         <template v-for="wifi in setup.wifis">
-                            <li v-on:click="setWlan">{{wifi.ssid}}</li>
+                            <li v-on:click="setWlan(wifi.ssid)">{{wifi.ssid}}</li>
                         </template>
                     </ul>
                     <div v-if="setup.step===2">
@@ -158,6 +159,13 @@
             },
             fade: function(val) {
                 this.$remote.$emit('fade', String(val));
+            },
+            websocketConnected: function(status) {
+               if(!status)
+               this.$notify.info({
+                    title: 'Connection lost',
+                    message: 'Oh no, Connection to lamp is gone :-('
+                });
             }
         },
         methods: {
@@ -181,12 +189,6 @@
         created: function() {
             bus.$on('websocketConnected', function(state){
                 this.websocketConnected = state;
-                if(!state) {
-                    this.$notify.info({
-                        title: 'Connection lost',
-                        message: 'Oh no, Connection to lamp is gone :-('
-                    });
-                }
             }.bind(this));
         }
     }
@@ -199,6 +201,7 @@
     }
     .container {
         padding: 15px;
+        min-height: 100vh;
     }
 
     .settings-form {
@@ -215,9 +218,8 @@
         margin: 20px auto;
         width: 12px;
         height: 12px;
-        background-color: #940;
+        background-color: #E21737;
         border-radius: 50%;
-        box-shadow: #000 0 -1px 7px 1px, inset #600 0 -1px 9px, #F00 0 2px 12px;
     }
 
     .led-blue {
@@ -226,7 +228,6 @@
         height: 12px;
         background-color: #4AB;
         border-radius: 50%;
-        box-shadow: #000 0 -1px 7px 1px, inset #006 0 -1px 9px, #06F 0 2px 14px;
     }
 
     .wlans {

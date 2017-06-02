@@ -29,11 +29,13 @@ Vue.use(Step);
 // Vue.prototype.$alert = MessageBox.alert;
 // Vue.prototype.$confirm = MessageBox.confirm;
 // Vue.prototype.$prompt = MessageBox.prompt;
- Vue.prototype.$notify = Notification;
+Vue.prototype.$notify = Notification;
 // Vue.prototype.$message = Message;
 import "element-ui/lib/theme-default/index.css";
-import VueWebsocket from "vue-websocket";
 import App from "./App.vue";
+import Loader from "./Loader.vue";
+Vue.use(Loader);
+Vue.component(Loader.name, Loader);
 
 // Vue.use(Pagination);
 // Vue.use(Dialog);
@@ -48,8 +50,8 @@ import App from "./App.vue";
 Vue.use(Input);
 // Vue.use(InputNumber);
 // Vue.use(Radio);
- Vue.use(RadioGroup);
- Vue.use(RadioButton);
+Vue.use(RadioGroup);
+Vue.use(RadioButton);
 // Vue.use(Checkbox);
 // Vue.use(CheckboxGroup);
 Vue.use(Switch);
@@ -90,9 +92,9 @@ Vue.use(
             bus.$emit('websocketConnected', false);
         }
     }
-)
+);
 
 new Vue({
-  el: '#app',
-  render: h => h(App)
+    el: '#app',
+    render: h => h(App)
 });
