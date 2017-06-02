@@ -4,6 +4,8 @@
 
 <template>
     <div class="loader">
+        <h2>Connection lost</h2>
+        <p>Tap to retry</p>
         <svg class="heart-loader" xmlns:rdf="http://www.w3.org/1999/02/22-rdf-syntax-ns#" xmlns:svg="http://www.w3.org/2000/svg" xmlns="http://www.w3.org/2000/svg" xmlns:xlink="http://www.w3.org/1999/xlink" viewBox="0 0 90 90" version="1.1">
             <g class="heart-loader__group">
                 <path class="heart-loader__square" stroke-width="1" fill="none" d="M0,30 0,90 60,90 60,30z"></path>
@@ -22,12 +24,6 @@
             return {}
         },
         methods: {
-            setup() {
-
-            }
-        },
-        created: function() {
-            this.setup();
         }
     }
 </script>
@@ -37,6 +33,11 @@
         box-sizing: border-box;
         margin: 0;
         padding: 0;
+    }
+
+    .loader {
+        width: 100%;
+        height: 100vh;
     }
 
     .heart-loader {

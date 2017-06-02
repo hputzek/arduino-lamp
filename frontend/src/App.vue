@@ -1,8 +1,8 @@
 <template>
     <div id="app" style="max-width: 480px; margin: 0 auto;">
-        <loader v-if="!websocketConnected"></loader>
         <div class="container">
             <div style="float:right" v-bind:class="{ 'led-blue': websocketConnected, 'led-red': !websocketConnected }"></div>
+            <loader v-on:click.native="reloadPage" v-if="!websocketConnected">asdf</loader>
             <el-tabs v-if="websocketConnected" name="tabs" value="first">
                 <el-tab-pane label="Status" name="first">
                     <el-form ref="form" class="settings-form">
@@ -71,7 +71,7 @@
     export default {
         data () {
             return {
-                websocketConnected: false,
+                websocketConnected: true,
                 setup: {
                     step: 1,
                     wifi: '',
@@ -176,6 +176,10 @@
                 this.setup.step = 2;
                 this.setup.wifi = e.target.innerText;
                 console.log(e);
+            },
+            reloadPage: function (event) {
+                console.log('click');
+                location.reload();
             }
         },
         remote: {
@@ -226,7 +230,7 @@
         margin: 20px auto;
         width: 12px;
         height: 12px;
-        background-color: #4AB;
+        background-color: #20a0ff;
         border-radius: 50%;
     }
 
