@@ -1,5 +1,6 @@
 
 #include <ESP8266WiFi.h>
+#include <ESP8266WebServer.h>
 #include <WiFiUdp.h>
 #include <PubSubClient.h>
 #include <hw_timer.h>
@@ -24,10 +25,10 @@ const byte outPin2 = 14;
 const byte outPin3 = 12;
 const byte outPin4 = 13;
 bool fade = false;
-int preset = 0;
+int preset = 1;
 byte brightness = 100;
 byte spread = 50;
-bool state = false;
+bool state = true;
 
 // lamp setup
 #define LAMP_NUM 4
@@ -47,11 +48,10 @@ const char* mqtt_brightness_topic = "office/light1/brightness";
 const char* mqtt_fade_topic = "office/light1/fade";
 const char* mqtt_spread_topic = "office/light1/spread";
 
+ESP8266WebServer server (80);
 WiFiClient espClient;
 PubSubClient mqttClient(espClient);
-
 WebSocketsServer webSocket = WebSocketsServer(80);
-
 
 void lampCallback(byte id, uint8_t brightness);
 void getLampsBrightness(int *brightnessArray, byte lampCount, int loverBoundary, int upperBoundary, int spread, int brightness);
@@ -82,6 +82,8 @@ bool loadSettings(){
   DynamicJsonBuffer jsonSettings;
   File configFile = SPIFFS.open("/config.json", "r");
     if (!configFile) {
+      File configFile = SPIFFS.open("/config.json", "w");
+      configFile.print("{}");
       Serial.println("Failed to open config file");
       return false;
     }
@@ -270,12 +272,17 @@ void setup() {
   Serial.println("Ready");
   Serial.print("IP address: ");
   Serial.println(WiFi.localIP());
-
+  server.begin();
+  server.serveStatic("/", SPIFFS, "/index.html");
+  server.serveStatic("/index.js", SPIFFS, "/index.js");
+  server.serveStatic("/vendor.js", SPIFFS, "/vendor.js");
   webSocket.begin();
   webSocket.onEvent(webSocketEvent);
 }
 
 void loop() {
+  yield();
+  server.handleClient();
   webSocket.loop();
   yield();
   setupMQTTClient();

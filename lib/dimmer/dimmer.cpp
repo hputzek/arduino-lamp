@@ -18,13 +18,13 @@ static bool triacPinMasks[DIMMER_MAX_TRIAC];           // Triac pin mask for reg
 static volatile uint8_t triacTimes[DIMMER_MAX_TRIAC];              // Triac time for registered dimmers
 
 // Timer ticks since zero crossing
-static uint8_t tmrCount = 0;
+static volatile uint8_t tmrCount = 0;
 
 // Global state variables
 bool Dimmer::started = false; // At least one dimmer has started
 
 // Timer interrupt
-void dimmerISR() {
+void ICACHE_RAM_ATTR dimmerISR() {
   // Increment ticks
   if (tmrCount < 254) {
     tmrCount++;
@@ -39,7 +39,7 @@ void dimmerISR() {
 }
 
 // Zero cross interrupt
-void callZeroCross() {
+void ICACHE_RAM_ATTR callZeroCross() {
     tmrCount = 0;
   // Turn off all triacs and disable further triac activation before anything else
   for (uint8_t i = 0; i < dimmerCount; i++) {
@@ -87,7 +87,7 @@ void Dimmer::begin(uint8_t value, bool on) {
     // Start zero cross circuit if not started yet
     pinMode(DIMMER_ZERO_CROSS_PIN, INPUT);
     // attach interrupt and setup timer
-    hw_timer_init(NMI_SOURCE, 1);
+    hw_timer_init(FRC1_SOURCE, 1);
     hw_timer_set_func(dimmerISR);
     hw_timer_arm(39);
     attachInterrupt(DIMMER_ZERO_CROSS_PIN, callZeroCross, RISING);
@@ -152,7 +152,7 @@ void Dimmer::setMinimum(uint8_t value) {
   }
 }
 
-void Dimmer::zeroCross() {
+void ICACHE_RAM_ATTR Dimmer::zeroCross() {
   // Calculate triac time for the current cycle
   uint8_t value = getValue();
   if (value > 0 && lampState) {
