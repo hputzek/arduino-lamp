@@ -1,19 +1,15 @@
 
 #include <ESP8266WiFi.h>
-#include <ESP8266WebServer.h>
 #include <WiFiUdp.h>
 #include <PubSubClient.h>
 #include <hw_timer.h>
-#include "Dimmer.h"
+#include <Dimmer.h>
 #include <Fader.h>
 #include <ArduinoJson.h>
-#include <WebSocketsServer.h>
-#include <Hash.h>
-#include "FS.h"
-#include "settings.h"
+#include <FS.h>
+#include <settings.h>
 
 // declarations
-void webSocketEvent(uint8_t num, WStype_t type, uint8_t * payload, size_t lenght);
 void mqttCallback(char* topic, byte* payload, unsigned int length);
 void setupMQTTClient();
 
@@ -48,10 +44,8 @@ const char* mqtt_brightness_topic = "office/light1/brightness";
 const char* mqtt_fade_topic = "office/light1/fade";
 const char* mqtt_spread_topic = "office/light1/spread";
 
-ESP8266WebServer server (80);
 WiFiClient espClient;
 PubSubClient mqttClient(espClient);
-WebSocketsServer webSocket = WebSocketsServer(80);
 
 void lampCallback(byte id, uint8_t brightness);
 void getLampsBrightness(int *brightnessArray, byte lampCount, int loverBoundary, int upperBoundary, int spread, int brightness);
@@ -60,6 +54,9 @@ void bubbleSort(float A[],int len);
 void bubbleUnsort(int *list, int length);
 bool saveSettings();
 bool loadSettings();
+void publishState();
+byte getMappedBrightness();
+const char* getCharFromByte(byte);
 
 
 Fader lamps[LAMP_NUM] = {
@@ -113,9 +110,9 @@ bool loadSettings(){
     if (preset == 0) {
       preset = settings["activePreset"];
     }
+  state = settings["state"];
   brightness = settings["presets"][String(preset)]["brightness"];
   fade = settings["presets"][String(preset)]["fade"];
-  state = settings["presets"][String(preset)]["state"];
   spread = settings["presets"][String(preset)]["spread"];
   return true;
 }
@@ -143,8 +140,9 @@ bool saveSettings() {
 
     configFile.close();
 
-    JsonObject& settings = jsonSettings.parseObject(buf.get());
+  JsonObject& settings = jsonSettings.parseObject(buf.get());
   settings["activePreset"] = preset;
+  settings["state"] = state;
   if(!settings["presets"]) {
      settings.createNestedObject("presets");
   }
@@ -153,7 +151,6 @@ bool saveSettings() {
 
   settings["presets"][String(preset)]["brightness"] = brightness;
   settings["presets"][String(preset)]["fade"] = fade;
-  settings["presets"][String(preset)]["state"] = state;
   settings["presets"][String(preset)]["spread"] = spread;
   File configFileSave = SPIFFS.open("/config.json", "w");
 
@@ -166,6 +163,17 @@ bool saveSettings() {
 
   configFile.close();
   return true;
+}
+
+void ICACHE_RAM_ATTR publishState(){
+    if (mqttClient.connected()) {
+      hw_timer_stop();
+      mqttClient.publish(mqtt_brightness_topic, String(brightness).c_str());
+      mqttClient.publish(mqtt_fade_topic, fade ? "ON" : "OFF");
+      mqttClient.publish(mqtt_spread_topic, String(spread).c_str());
+      Dimmer *dimmer = &dimmers[0];
+     dimmer->restart();
+    }
 }
 
 void lampCallback(byte id, uint8_t brightness){
@@ -202,13 +210,16 @@ void getLampsBrightness(int *brightnessArray, byte lampCount, int lowerBoundary,
     bubbleUnsort(brightnessArray,lampCount);
 }
 
+byte getMappedBrightness() {
+  return map(brightness, 1, 100, 1, 255);
+}
 
 void updateLamps() {
   Fader *lamp = &lamps[0];
   if(fade) {
     int duration = random(1000, 3000);
     if (lamp->is_fading() == false) {
-      getLampsBrightness(brightnessArray, LAMP_NUM, 1, 255, spread, brightness);
+      getLampsBrightness(brightnessArray, LAMP_NUM, 1, 255, spread, getMappedBrightness());
       Serial.println(brightnessArray[0]);
       Serial.println(brightnessArray[1]);
       Serial.println((brightnessArray[0] + brightnessArray[1]) /2 );
@@ -228,7 +239,7 @@ void updateLamps() {
   } else {
     for (byte i = 0; i < LAMP_NUM; i++) {
       Fader *lamp = &lamps[i];
-      lamp->set_value(brightness);
+      lamp->set_value(getMappedBrightness());
       lamp->update();
     }
   }
@@ -272,18 +283,9 @@ void setup() {
   Serial.println("Ready");
   Serial.print("IP address: ");
   Serial.println(WiFi.localIP());
-  server.begin();
-  server.serveStatic("/", SPIFFS, "/index.html");
-  server.serveStatic("/index.js", SPIFFS, "/index.js");
-  server.serveStatic("/vendor.js", SPIFFS, "/vendor.js");
-  webSocket.begin();
-  webSocket.onEvent(webSocketEvent);
 }
 
 void loop() {
-  yield();
-  server.handleClient();
-  webSocket.loop();
   yield();
   setupMQTTClient();
   mqttClient.loop();
@@ -353,7 +355,6 @@ void setupMQTTClient() {
           Serial.print(mqttClient.state());
           Serial.println(")");
         }
-
         if (mqttClient.connected()) {
           Serial.print("MQTT topic '");
           Serial.print(mqtt_state_topic);
@@ -439,7 +440,7 @@ void mqttCallback(char* topic, byte* payload, unsigned int length) {
     if (mqttDebug) { Serial.println(""); }
 
     if (s_payload.toInt() != 0) {
-      brightness = map((byte)s_payload.toInt(), 1, 100, 1, 255);
+      brightness = (byte)s_payload.toInt();
     }
   }
   else if (s_topic == mqtt_preset_topic) {
@@ -449,6 +450,7 @@ void mqttCallback(char* topic, byte* payload, unsigned int length) {
       preset = constrain(s_payload.toInt(),1,5);
       hw_timer_stop();
       loadSettings();
+      publishState();
       Dimmer *dimmer = &dimmers[0];
       dimmer->restart();
     }
@@ -465,41 +467,6 @@ void mqttCallback(char* topic, byte* payload, unsigned int length) {
   }
   hw_timer_stop();
   saveSettings();
- Dimmer *dimmer = &dimmers[0];
- dimmer->restart();
-}
-
-void webSocketEvent(uint8_t num, WStype_t type, uint8_t * payload, size_t lenght) {
-
-    switch(type) {
-        case WStype_DISCONNECTED:
-            Serial.printf("[%u] Disconnected!\n", num);
-            break;
-        case WStype_CONNECTED:
-            {
-                IPAddress ip = webSocket.remoteIP(num);
-                Serial.printf("[%u] Connected from %d.%d.%d.%d url: %s\n", num, ip[0], ip[1], ip[2], ip[3], payload);
-
-        				// send message to client
-        				webSocket.sendTXT(num, "3");
-            }
-            break;
-        case WStype_TEXT:
-            Serial.printf("[%u] get Text: %s\n", num, payload);
-
-            // send message to client
-            // webSocket.sendTXT(num, "message here");
-
-            // send data to all connected clients
-            // webSocket.broadcastTXT("message here");
-            break;
-        case WStype_BIN:
-            Serial.printf("[%u] get binary lenght: %u\n", num, lenght);
-            hexdump(payload, lenght);
-
-            // send message to client
-            // webSocket.sendBIN(num, payload, lenght);
-            break;
-    }
-
+  Dimmer *dimmer = &dimmers[0];
+  dimmer->restart();
 }
