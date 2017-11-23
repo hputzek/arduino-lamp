@@ -26,7 +26,7 @@ bool Dimmer::started = false; // At least one dimmer has started
 // Timer interrupt
 void ICACHE_RAM_ATTR dimmerISR() {
   // Increment ticks
-  if (tmrCount < 254) {
+  if (tmrCount < 255) {
     tmrCount++;
   }
 
@@ -131,7 +131,7 @@ void Dimmer::set(uint8_t value) {
   }
 
   if (value != lampValue) {
-    lampValue = 255 - value;
+    lampValue = 256 - value;
   }
 }
 

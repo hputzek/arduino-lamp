@@ -5,7 +5,7 @@
  * This software is released under the MIT license. See the attached LICENSE file for details.
  */
 
- #include "Arduino.h"
+#include "Arduino.h"
 
 #ifndef DIMMER_H
 #define DIMMER_H
@@ -23,7 +23,7 @@
  *
  * @see https://www.arduino.cc/en/Reference/attachInterrupt for more information.
  */
-#define DIMMER_ZERO_CROSS_PIN       4
+#define DIMMER_ZERO_CROSS_PIN       2
 
 /**
  * A dimmer channel.

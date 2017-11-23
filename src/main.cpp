@@ -1,4 +1,3 @@
-
 #include <ESP8266WiFi.h>
 #include <WiFiUdp.h>
 #include <PubSubClient.h>
@@ -7,73 +6,9 @@
 #include <Fader.h>
 #include <ArduinoJson.h>
 #include <FS.h>
+#include <main.h>
 #include <settings.h>
 
-// declarations
-void mqttCallback(char* topic, byte* payload, unsigned int length);
-void setupMQTTClient();
-
-
-// OTHER SETTINGS
-const byte mqttDebug = 1;
-const byte outPin1 = 16;
-const byte outPin2 = 14;
-const byte outPin3 = 12;
-const byte outPin4 = 13;
-bool fade = false;
-int preset = 1;
-byte brightness = 100;
-byte spread = 50;
-bool state = true;
-
-// lamp setup
-#define LAMP_NUM 4
-
-// const char* ssid = "my-ssid";
-// const char* password = "password";
-
-// MQTT Settings
-//const char* mqtt_server = "m2m.eclipse.org";
-const char* mqtt_server = "192.168.178.23";
-const int mqtt_port = 1883;
-const char* mqtt_user = "";
-const char* mqtt_password = "";
-const char* mqtt_preset_topic = "office/light1/preset";
-const char* mqtt_state_topic = "office/light1/state";
-const char* mqtt_brightness_topic = "office/light1/brightness";
-const char* mqtt_fade_topic = "office/light1/fade";
-const char* mqtt_spread_topic = "office/light1/spread";
-
-WiFiClient espClient;
-PubSubClient mqttClient(espClient);
-
-void lampCallback(byte id, uint8_t brightness);
-void getLampsBrightness(int *brightnessArray, byte lampCount, int loverBoundary, int upperBoundary, int spread, int brightness);
-void updateLamps();
-void bubbleSort(float A[],int len);
-void bubbleUnsort(int *list, int length);
-bool saveSettings();
-bool loadSettings();
-void publishState();
-byte getMappedBrightness();
-const char* getCharFromByte(byte);
-
-
-Fader lamps[LAMP_NUM] = {
-  Fader(1,lampCallback),
-  Fader(2,lampCallback),
-  Fader(3,lampCallback),
-  Fader(4,lampCallback)
-};
-
-Dimmer dimmers[LAMP_NUM] = {
-  Dimmer(outPin1, 0),
-  Dimmer(outPin2, 0),
-  Dimmer(outPin3, 0),
-  Dimmer(outPin4, 0),
-};
-
-int brightnessArray[LAMP_NUM];
 
 bool loadSettings(){
   DynamicJsonBuffer jsonSettings;
@@ -171,15 +106,14 @@ void ICACHE_RAM_ATTR publishState(){
       mqttClient.publish(mqtt_brightness_topic, String(brightness).c_str());
       mqttClient.publish(mqtt_fade_topic, fade ? "ON" : "OFF");
       mqttClient.publish(mqtt_spread_topic, String(spread).c_str());
-      Dimmer *dimmer = &dimmers[0];
-     dimmer->restart();
+      //Dimmer *dimmer =
+      dimmers[0].restart();
     }
 }
 
 void lampCallback(byte id, uint8_t brightness){
       yield();
-      Dimmer *dimmer= &dimmers[id-1];
-      dimmer->set(brightness);
+      dimmers[id-1].set(brightness);
       yield();
 }
 
@@ -215,10 +149,9 @@ byte getMappedBrightness() {
 }
 
 void updateLamps() {
-  Fader *lamp = &lamps[0];
   if(fade) {
     int duration = random(1000, 3000);
-    if (lamp->is_fading() == false) {
+    if (lamps[0].is_fading() == false) {
       getLampsBrightness(brightnessArray, LAMP_NUM, 1, 255, spread, getMappedBrightness());
       Serial.println(brightnessArray[0]);
       Serial.println(brightnessArray[1]);
@@ -226,21 +159,18 @@ void updateLamps() {
       Serial.println("---");
 
       for (byte i = 0; i < LAMP_NUM; i++) {
-        Fader *lamp = &lamps[i];
-        lamp->fade(brightnessArray[i], duration);
-        lamp->update();
+        lamps[i].fade(brightnessArray[i], duration);
+        lamps[i].update();
       }
     } else {
       for (byte i = 0; i < LAMP_NUM; i++) {
-        Fader *lamp = &lamps[i];
-        lamp->update();
+        lamps[i].update();
       }
     }
   } else {
     for (byte i = 0; i < LAMP_NUM; i++) {
-      Fader *lamp = &lamps[i];
-      lamp->set_value(getMappedBrightness());
-      lamp->update();
+      lamps[i].set_value(getMappedBrightness());
+      lamps[i].update();
     }
   }
 }
@@ -266,8 +196,7 @@ void setup() {
 
     randomSeed(micros());
     for (byte i = 0; i < LAMP_NUM; i++) {
-      Dimmer *dimmer= &dimmers[i];
-      dimmer->begin(brightness,true);
+      dimmers[i].begin(brightness,true);
       updateLamps();
       delay(500);
       yield();
@@ -275,7 +204,7 @@ void setup() {
 
   yield();
   WiFi.mode(WIFI_STA);
-  WiFi.begin(ssid, password);
+  WiFi.begin(WLAN_SSID, WLAN_PASSWORD);
   while (WiFi.waitForConnectResult() != WL_CONNECTED) {
     Serial.println("Connection Failed! Rebooting...");
     ESP.restart();
@@ -451,8 +380,7 @@ void mqttCallback(char* topic, byte* payload, unsigned int length) {
       hw_timer_stop();
       loadSettings();
       publishState();
-      Dimmer *dimmer = &dimmers[0];
-      dimmer->restart();
+      dimmers[0].restart();
     }
   }
   else if (s_topic == mqtt_spread_topic) {
@@ -467,6 +395,5 @@ void mqttCallback(char* topic, byte* payload, unsigned int length) {
   }
   hw_timer_stop();
   saveSettings();
-  Dimmer *dimmer = &dimmers[0];
-  dimmer->restart();
+  dimmers[0].restart();
 }
