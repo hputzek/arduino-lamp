@@ -10,3 +10,5 @@ node_modules/
 dist/
 npm-debug.log
 .idea
+.vscode/c_cpp_properties.json
+.vscode/launch.json
