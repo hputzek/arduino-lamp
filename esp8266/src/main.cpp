@@ -8,9 +8,10 @@
 #include "Arduino.h"
 #include "main.h"
 
-char mqtt_server[40];
-char mqtt_port[6] = "8080";
-char mqtt_device_address[64] = "livingRoom";
+#define NUMBER_OF_LAMPS 4
+const char *mqtt_server = "192.168.178.23";
+const char *mqtt_port = "1883";
+const char *mqtt_device_address = "livingRoom";
 
 // state
 TOPICS topics;
@@ -24,62 +25,75 @@ AsyncMqttClient mqttClient;
 //callback notifying us of the need to save config
 void saveConfigCallback()
 {
-  Serial.println("Should save config");
   shouldSaveConfig = true;
 }
 
 void onMqttConnect(bool sessionPresent)
 {
-  mqttClient.subscribe(getTopic(topics.mqtt_single_mode_topic), 1);
-  mqttClient.subscribe(getTopic(topics.mqtt_state_topic), 1);
-  mqttClient.subscribe(getTopic(topics.mqtt_brightness_topic), 1);
-  mqttClient.subscribe(getTopic(topics.mqtt_fade_topic), 1);
-  mqttClient.subscribe(getTopic(topics.mqtt_fade_upper_boundary_topic), 1);
-  mqttClient.subscribe(getTopic(topics.mqtt_fade_lower_boundary_topic), 1);
-  mqttClient.subscribe(getTopic(topics.mqtt_spread_topic), 1);
+  Serial.println(getTopic(topics.mqtt_single_mode_topic));
+  mqttClient.subscribe(getTopic(topics.mqtt_single_mode_topic), 2);
+  mqttClient.subscribe(getTopic(topics.mqtt_state_topic), 2);
+  mqttClient.subscribe(getTopic(topics.mqtt_brightness_topic), 2);
+  mqttClient.subscribe(getTopic(topics.mqtt_fade_topic), 2);
+  mqttClient.subscribe(getTopic(topics.mqtt_fade_upper_boundary_topic), 2);
+  mqttClient.subscribe(getTopic(topics.mqtt_fade_lower_boundary_topic), 2);
+  mqttClient.subscribe(getTopic(topics.mqtt_spread_topic), 2);
   // handle status
   mqttClient.publish(getTopic(topics.mqtt_status_topic), 2, true, "online");
   mqttClient.setWill(getTopic(topics.mqtt_status_topic), 2, true, "offline");
 }
 
+void onMqttSubscribe(uint16_t packetId, uint8_t qos)
+{
+  Serial.println("Subscribe acknowledged.");
+  Serial.print("  packetId: ");
+  Serial.println(packetId);
+  Serial.print("  qos: ");
+  Serial.println(qos);
+}
+
 void onMqttMessage(char *topic, char *payload, AsyncMqttClientMessageProperties properties, size_t len, size_t index, size_t total)
 {
-  if (getTopic(topics.mqtt_single_mode_topic) == topic)
+  if (strcmp(getTopic(topics.mqtt_single_mode_topic), topic) == 0)
   {
+    Serial.println("single Mode is:");
     state.singleMode = (bool)payload;
+    Serial.println(state.singleMode);
   };
-  if (getTopic(topics.mqtt_state_topic) == topic)
+  if (strcmp(getTopic(topics.mqtt_state_topic), topic) == 0)
   {
     state.state = (bool)payload;
   };
-  if (getTopic(topics.mqtt_brightness_topic) == topic)
+  if (strcmp(getTopic(topics.mqtt_brightness_topic), topic) == 0)
   {
     if (state.singleMode)
     {
       char **brightness = NULL;
       int count = split(payload, ',', &brightness);
-
-    for (uint8_t i = 0; i < count; i++)
-        state.brightnessSingle[i] = atoi(brightness[i]);
+      if (count < NUMBER_OF_LAMPS)
+      {
+        for (uint8_t i = 0; i < count; i++)
+          state.brightnessSingle[i] = atoi(brightness[i]);
+      }
     }
     else
     {
       state.brightness = constrain(atoi(payload), 0, 100);
     }
   };
-  if (getTopic(topics.mqtt_fade_topic) == topic)
+  if (strcmp(getTopic(topics.mqtt_fade_topic), topic) == 0)
   {
     state.fade = (bool)payload;
   };
-  if (getTopic(topics.mqtt_fade_lower_boundary_topic) == topic)
+  if (strcmp(getTopic(topics.mqtt_fade_lower_boundary_topic), topic) == 0)
   {
     state.fadeLowerBoundary = constrain(atoi(payload), 100, 60000);
   };
-  if (getTopic(topics.mqtt_fade_upper_boundary_topic) == topic)
+  if (strcmp(getTopic(topics.mqtt_fade_upper_boundary_topic), topic) == 0)
   {
     state.fadeUpperBoundary = constrain(atoi(payload), state.fadeLowerBoundary, 60000);
   };
-  if (getTopic(topics.mqtt_spread_topic) == topic)
+  if (strcmp(getTopic(topics.mqtt_spread_topic), topic) == 0)
   {
     state.spread = constrain(atoi(payload), 0, 100);
   };
@@ -111,11 +125,15 @@ void publishState()
   root["fadeUpperBoundary"] = state.fadeUpperBoundary;
   root["spread"] = state.spread;
   root["fade"] = state.fade;
-
+  String output;
+  root.printTo(output);
+  mqttClient.publish("debug", 0, false, output.c_str());
   root.printTo(Serial);
 }
-void loadConfiguration()
+bool loadConfiguration()
 {
+  yield();
+  bool success = false;
   //read configuration from FS json
   if (SPIFFS.begin())
   {
@@ -132,16 +150,18 @@ void loadConfiguration()
         configFile.readBytes(buf.get(), size);
         DynamicJsonBuffer jsonBuffer;
         JsonObject &json = jsonBuffer.parseObject(buf.get());
+
         if (json.success())
         {
-
-          strcpy(mqtt_server, json["mqtt_server"]);
-          strcpy(mqtt_port, json["mqtt_port"]);
-          strcpy(mqtt_device_address, json["mqtt_device_address"]);
+          mqtt_server = json["mqtt_server"];
+          mqtt_port = json["mqtt_port"];
+          mqtt_device_address = json["mqtt_device_address"];
+          success = true;
         }
       }
     }
   }
+  return success;
 }
 
 void connect()
@@ -160,18 +180,18 @@ void connect()
   //set config save notify callback
   wifiManager.setSaveConfigCallback(saveConfigCallback);
 
-  //set static ip
-  wifiManager.setSTAStaticIPConfig(IPAddress(10, 0, 1, 99), IPAddress(10, 0, 1, 1), IPAddress(255, 255, 255, 0));
-
   //add all your parameters here
   wifiManager.addParameter(&custom_mqtt_server);
   wifiManager.addParameter(&custom_mqtt_port);
   wifiManager.addParameter(&custom_mqtt_address);
+  if (!loadConfiguration())
+  {
+    wifiManager.startConfigPortal("LampSetup", "esp8266");
+  }
   //fetches ssid and pass and tries to connect
   //if it does not connect it starts an access point with the specified name
-  //here  "AutoConnectAP"
   //and goes into a blocking loop awaiting configuration
-  if (!wifiManager.autoConnect("AutoConnectAP", "password"))
+  if (!wifiManager.autoConnect("LampSetup", "esp8266"))
   {
     Serial.println("failed to connect and hit timeout");
     delay(3000);
@@ -179,10 +199,6 @@ void connect()
     ESP.reset();
     delay(5000);
   }
-  //read updated parameters
-  strcpy(mqtt_server, custom_mqtt_server.getValue());
-  strcpy(mqtt_port, custom_mqtt_port.getValue());
-  strcpy(mqtt_device_address, custom_mqtt_address.getValue());
 
   //save the custom parameters to FS
   if (shouldSaveConfig)
@@ -197,16 +213,20 @@ void connect()
     json.printTo(configFile);
     configFile.close();
   }
-  // convert content of mqtt_server to a (hopefully) valid ip address
-  IPAddress mqttServerIp;
-  if (mqttServerIp.fromString(mqtt_server))
-  {
-    mqttClient.setServer(mqttServerIp, atoi(mqtt_port));
-    mqttClient.connect();
-  }
 
+  //read updated parameters
+  mqtt_server = custom_mqtt_server.getValue();
+  mqtt_port = custom_mqtt_port.getValue();
+  mqtt_device_address = custom_mqtt_address.getValue();
+
+  Serial.println(mqtt_server);
+  Serial.println(atoi(mqtt_port));
+
+  mqttClient.setServer(mqtt_server, atoi(mqtt_port));
   mqttClient.onMessage(onMqttMessage);
   mqttClient.onConnect(onMqttConnect);
+  mqttClient.onSubscribe(onMqttSubscribe);
+  mqttClient.connect();
 }
 
 void setup()
@@ -219,68 +239,69 @@ void loop()
 {
 }
 
-char *getTopic(char *topic)
+const char *getTopic(const char *topic)
 {
-  return strcat(mqtt_device_address, (char *)topic);
+  String total = String(mqtt_device_address) + String(topic);
+  return total.c_str();
 }
 
-int split (char *str, char c, char ***arr)
+int split(char *str, char c, char ***arr)
 {
-    int count = 1;
-    int token_len = 1;
-    int i = 0;
-    char *p;
-    char *t;
+  int count = 1;
+  int token_len = 1;
+  int i = 0;
+  char *p;
+  char *t;
 
-    p = str;
-    while (*p != '\0')
+  p = str;
+  while (*p != '\0')
+  {
+    if (*p == c)
+      count++;
+    p++;
+  }
+
+  *arr = (char **)malloc(sizeof(char *) * count);
+  if (*arr == NULL)
+    exit(1);
+
+  p = str;
+  while (*p != '\0')
+  {
+    if (*p == c)
     {
-        if (*p == c)
-            count++;
-        p++;
-    }
-
-    *arr = (char**) malloc(sizeof(char*) * count);
-    if (*arr == NULL)
+      (*arr)[i] = (char *)malloc(sizeof(char) * token_len);
+      if ((*arr)[i] == NULL)
         exit(1);
 
-    p = str;
-    while (*p != '\0')
-    {
-        if (*p == c)
-        {
-            (*arr)[i] = (char*) malloc( sizeof(char) * token_len );
-            if ((*arr)[i] == NULL)
-                exit(1);
-
-            token_len = 0;
-            i++;
-        }
-        p++;
-        token_len++;
+      token_len = 0;
+      i++;
     }
-    (*arr)[i] = (char*) malloc( sizeof(char) * token_len );
-    if ((*arr)[i] == NULL)
-        exit(1);
+    p++;
+    token_len++;
+  }
+  (*arr)[i] = (char *)malloc(sizeof(char) * token_len);
+  if ((*arr)[i] == NULL)
+    exit(1);
 
-    i = 0;
-    p = str;
-    t = ((*arr)[i]);
-    while (*p != '\0')
+  i = 0;
+  p = str;
+  t = ((*arr)[i]);
+  while (*p != '\0')
+  {
+    if (*p != c && *p != '\0')
     {
-        if (*p != c && *p != '\0')
-        {
-            *t = *p;
-            t++;
-        }
-        else
-        {
-            *t = '\0';
-            i++;
-            t = ((*arr)[i]);
-        }
-        p++;
+      *t = *p;
+      t++;
     }
+    else
+    {
+      *t = '\0';
+      i++;
+      t = ((*arr)[i]);
+    }
+    p++;
+  }
 
-    return count;
+  return count;
 }

@@ -33,9 +33,10 @@ typedef struct
 
 void saveConfigCallback();
 void connect();
+bool loadConfiguration();
 void onMqttMessage(char *topic, char *payload, AsyncMqttClientMessageProperties properties, size_t len, size_t index, size_t total);
 void onMqttConnect(bool);
-char *getTopic(char *topic);
+const char* getTopic(const char *topic);
 int split (char *str, char c, char ***arr);
 void publishState();
 
