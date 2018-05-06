@@ -32,6 +32,7 @@
 uint8_t masterBrightness = 5;
 bool isFading = false;
 bool singleModeEnabled = false;
+bool state = true;
 uint8_t singleBrightess[NUMBER_OF_LAMPS] = {0, 0, 0, 0};
 
 int fadeLowerBoundary = 3000;

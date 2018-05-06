@@ -9,6 +9,9 @@
 #include "main.h"
 
 #define NUMBER_OF_LAMPS 4
+#define MINIMUM_FADING_TIME 100
+#define MAXIMUM_FADING_TIME 30000
+#define ENABLE_LOGGING false
 const char *mqtt_server = "192.168.178.23";
 const char *mqtt_port = "1883";
 const char *mqtt_device_address = "livingRoom";
@@ -28,9 +31,16 @@ void saveConfigCallback()
   shouldSaveConfig = true;
 }
 
+void onMqttDisconnect(AsyncMqttClientDisconnectReason reason)
+{
+  if (WiFi.isConnected())
+  {
+    mqttClient.connect();
+  }
+}
+
 void onMqttConnect(bool sessionPresent)
 {
-  Serial.println(getTopic(topics.mqtt_single_mode_topic));
   mqttClient.subscribe(getTopic(topics.mqtt_single_mode_topic), 2);
   mqttClient.subscribe(getTopic(topics.mqtt_state_topic), 2);
   mqttClient.subscribe(getTopic(topics.mqtt_brightness_topic), 2);
@@ -45,36 +55,31 @@ void onMqttConnect(bool sessionPresent)
 
 void onMqttSubscribe(uint16_t packetId, uint8_t qos)
 {
-  Serial.println("Subscribe acknowledged.");
-  Serial.print("  packetId: ");
-  Serial.println(packetId);
-  Serial.print("  qos: ");
-  Serial.println(qos);
+  if (ENABLE_LOGGING == true)
+  {
+    Serial.println("Subscribe acknowledged.");
+    Serial.print("  packetId: ");
+    Serial.println(packetId);
+    Serial.print("  qos: ");
+    Serial.println(qos);
+  }
 }
 
 void onMqttMessage(char *topic, char *payload, AsyncMqttClientMessageProperties properties, size_t len, size_t index, size_t total)
 {
   if (strcmp(getTopic(topics.mqtt_single_mode_topic), topic) == 0)
   {
-    Serial.println("single Mode is:");
-    state.singleMode = (bool)payload;
-    Serial.println(state.singleMode);
+    setBoolean(payload, state.singleMode);
   };
   if (strcmp(getTopic(topics.mqtt_state_topic), topic) == 0)
   {
-    state.state = (bool)payload;
+    setBoolean(payload, state.state);
   };
   if (strcmp(getTopic(topics.mqtt_brightness_topic), topic) == 0)
   {
-    if (state.singleMode)
+    if (state.singleMode == true)
     {
-      char **brightness = NULL;
-      int count = split(payload, ',', &brightness);
-      if (count < NUMBER_OF_LAMPS)
-      {
-        for (uint8_t i = 0; i < count; i++)
-          state.brightnessSingle[i] = atoi(brightness[i]);
-      }
+     setSingleBrightnessArray(payload);
     }
     else
     {
@@ -83,30 +88,43 @@ void onMqttMessage(char *topic, char *payload, AsyncMqttClientMessageProperties 
   };
   if (strcmp(getTopic(topics.mqtt_fade_topic), topic) == 0)
   {
-    state.fade = (bool)payload;
+    setBoolean(payload, state.fade);
   };
   if (strcmp(getTopic(topics.mqtt_fade_lower_boundary_topic), topic) == 0)
   {
-    state.fadeLowerBoundary = constrain(atoi(payload), 100, 60000);
+    state.fadeLowerBoundary = constrain(atoi(payload), MINIMUM_FADING_TIME, MAXIMUM_FADING_TIME);
   };
   if (strcmp(getTopic(topics.mqtt_fade_upper_boundary_topic), topic) == 0)
   {
-    state.fadeUpperBoundary = constrain(atoi(payload), state.fadeLowerBoundary, 60000);
+    state.fadeUpperBoundary = constrain(atoi(payload), state.fadeLowerBoundary, MAXIMUM_FADING_TIME);
   };
   if (strcmp(getTopic(topics.mqtt_spread_topic), topic) == 0)
   {
-    state.spread = constrain(atoi(payload), 0, 100);
+    state.spread = constrain(atoi(payload), 0, 100) / 2;
   };
 
   publishState();
 };
 
+void setBoolean(char *&payload, bool &state)
+{
+  if (strcmp(payload, (char *)"ON") == 0 || strcmp(payload, (char *)"TRUE") == 0 || strcmp(payload, (char *)"true") == 0)
+  {
+    state = true;
+  }
+  else
+  {
+    state = false;
+  }
+}
+
 void publishState()
 {
-  const size_t bufferSize = JSON_ARRAY_SIZE(4) + JSON_OBJECT_SIZE(6);
+  const size_t bufferSize = JSON_ARRAY_SIZE(4) + JSON_OBJECT_SIZE(8);
   DynamicJsonBuffer jsonBuffer(bufferSize);
 
   JsonObject &root = jsonBuffer.createObject();
+  root["state"] = state.state;
   root["singleMode"] = state.singleMode;
   if (state.singleMode)
   {
@@ -121,18 +139,17 @@ void publishState()
     root["brightness"] = state.brightness;
   }
 
-  root["fadeLowerBoundary"] = state.fadeLowerBoundary;
+  root["fadeLowerBoundary"] = (state.fadeLowerBoundary < state.fadeUpperBoundary) ? state.fadeLowerBoundary : state.fadeUpperBoundary;
   root["fadeUpperBoundary"] = state.fadeUpperBoundary;
   root["spread"] = state.spread;
   root["fade"] = state.fade;
   String output;
   root.printTo(output);
-  mqttClient.publish("debug", 0, false, output.c_str());
+  mqttClient.publish(getTopic(topics.mqtt_log_topic), 0, false, output.c_str());
   root.printTo(Serial);
 }
 bool loadConfiguration()
 {
-  yield();
   bool success = false;
   //read configuration from FS json
   if (SPIFFS.begin())
@@ -177,6 +194,8 @@ void connect()
   //Local intialization. Once its business is done, there is no need to keep it around
   WiFiManager wifiManager;
 
+  wifiManager.setDebugOutput(ENABLE_LOGGING);
+
   //set config save notify callback
   wifiManager.setSaveConfigCallback(saveConfigCallback);
 
@@ -193,7 +212,7 @@ void connect()
   //and goes into a blocking loop awaiting configuration
   if (!wifiManager.autoConnect("LampSetup", "esp8266"))
   {
-    Serial.println("failed to connect and hit timeout");
+    log("failed to connect and hit timeout");
     delay(3000);
     //reset and try again, or maybe put it to deep sleep
     ESP.reset();
@@ -219,13 +238,12 @@ void connect()
   mqtt_port = custom_mqtt_port.getValue();
   mqtt_device_address = custom_mqtt_address.getValue();
 
-  Serial.println(mqtt_server);
-  Serial.println(atoi(mqtt_port));
-
   mqttClient.setServer(mqtt_server, atoi(mqtt_port));
   mqttClient.onMessage(onMqttMessage);
   mqttClient.onConnect(onMqttConnect);
   mqttClient.onSubscribe(onMqttSubscribe);
+  mqttClient.onDisconnect(onMqttDisconnect);
+  mqttClient.setMaxTopicLength(128);
   mqttClient.connect();
 }
 
@@ -245,63 +263,23 @@ const char *getTopic(const char *topic)
   return total.c_str();
 }
 
-int split(char *str, char c, char ***arr)
+void setSingleBrightnessArray(char *brightnessTopic)
 {
-  int count = 1;
-  int token_len = 1;
-  int i = 0;
-  char *p;
-  char *t;
+  const size_t bufferSize = JSON_ARRAY_SIZE(4) + 20;
+  DynamicJsonBuffer jsonBuffer(bufferSize);
+  JsonArray &root = jsonBuffer.parseArray(brightnessTopic);
 
-  p = str;
-  while (*p != '\0')
+  JsonArray &root_ = root;
+  state.brightnessSingle[0] = root_[0];
+  state.brightnessSingle[1] = root_[1];
+  state.brightnessSingle[2] = root_[2];
+  state.brightnessSingle[3] = root_[3];
+}
+
+void log(const char *message)
+{
+  if (ENABLE_LOGGING == true)
   {
-    if (*p == c)
-      count++;
-    p++;
+    Serial.println(message);
   }
-
-  *arr = (char **)malloc(sizeof(char *) * count);
-  if (*arr == NULL)
-    exit(1);
-
-  p = str;
-  while (*p != '\0')
-  {
-    if (*p == c)
-    {
-      (*arr)[i] = (char *)malloc(sizeof(char) * token_len);
-      if ((*arr)[i] == NULL)
-        exit(1);
-
-      token_len = 0;
-      i++;
-    }
-    p++;
-    token_len++;
-  }
-  (*arr)[i] = (char *)malloc(sizeof(char) * token_len);
-  if ((*arr)[i] == NULL)
-    exit(1);
-
-  i = 0;
-  p = str;
-  t = ((*arr)[i]);
-  while (*p != '\0')
-  {
-    if (*p != c && *p != '\0')
-    {
-      *t = *p;
-      t++;
-    }
-    else
-    {
-      *t = '\0';
-      i++;
-      t = ((*arr)[i]);
-    }
-    p++;
-  }
-
-  return count;
 }

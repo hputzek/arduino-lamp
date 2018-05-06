@@ -12,7 +12,7 @@ void setBrightnessCallback(uint8_t id, uint8_t brightness)
 void setup()
 {
   randomSeed(analogRead(0));
-  Serial.begin(9600);
+  Serial.begin(115200);
   delay(100);
   getRandomizedBrightness(brightnessArray, NUMBER_OF_LAMPS, 1, 100, spread, masterBrightness);
   initializeDimmers();
@@ -35,16 +35,15 @@ void initializeDimmers()
 
 void updateState()
 {
-  if (isFading)
+  if (isFading == true && state == true && singleModeEnabled == false)
   {
     int duration = random(fadeLowerBoundary, fadeUpperBoundary);
     if (faders[0].is_fading() == false)
     {
       getRandomizedBrightness(brightnessArray, NUMBER_OF_LAMPS, 1, 100, spread, masterBrightness);
-
       for (byte i = 0; i < NUMBER_OF_LAMPS; i++)
       {
-        faders[i].fade(singleModeEnabled ? singleBrightess[i] : brightnessArray[i], duration);
+        faders[i].fade(brightnessArray[i], duration);
         faders[i].update();
       }
     }
@@ -60,7 +59,14 @@ void updateState()
   {
     for (byte i = 0; i < NUMBER_OF_LAMPS; i++)
     {
-      faders[i].set_value(singleModeEnabled ? singleBrightess[i] : brightnessArray[i]);
+      if (state == true)
+      {
+        faders[i].set_value(singleModeEnabled ? singleBrightess[i] : brightnessArray[i]);
+      }
+      else
+      {
+        faders[i].set_value(0);
+      }
       faders[i].update();
     }
   }
@@ -76,7 +82,8 @@ void stopFaders()
 
 void getRandomizedBrightness(int *brightnessArray, uint8_t numberOfLamps, int fadeLowerBoundary, int fadeUpperBoundary, int spread, int brightness)
 {
-  if(spread < 2) {
+  if (spread < 2)
+  {
     return;
   }
   spread /= 2;
@@ -129,10 +136,10 @@ void getSerialData()
   if (Serial.available())
   {
     Serial.flush();
-    const size_t bufferSize = JSON_ARRAY_SIZE(4) + JSON_OBJECT_SIZE(6) + 256;
+    const size_t bufferSize = JSON_ARRAY_SIZE(4) + JSON_OBJECT_SIZE(7) + 256;
     DynamicJsonBuffer jsonBuffer(bufferSize);
 
-    // example json:  "{\"singleMode\":true,\"brightness\":[30,50,80,100],\"fade\":true,\"fadeLowerBoundary\":1,\"fadeUpperBoundary\":100,\"spread\":5}";
+    // example json:  "{\"singleMode\":true,\"state\":true,\"brightness\":[30,50,80,100],\"fade\":true,\"fadeLowerBoundary\":1,\"fadeUpperBoundary\":100,\"spread\":5}";
 
     JsonObject &root = jsonBuffer.parseObject(Serial);
 
@@ -143,15 +150,12 @@ void getSerialData()
     }
 
     // Test if parsing succeeds.
-    if (root.success())
+    if (!root.success())
     {
-      stopFaders();
-    }
-    else
-    {
-      Serial.println("parseObject() failed");
       return;
     }
+
+    stopFaders();
 
     singleModeEnabled = root["singleMode"];
 
@@ -167,9 +171,15 @@ void getSerialData()
     {
       masterBrightness = root["brightness"];
       getRandomizedBrightness(brightnessArray, NUMBER_OF_LAMPS, 1, 100, spread, masterBrightness);
+      for (byte i = 0; i < NUMBER_OF_LAMPS; i++)
+      {
+        faders[i].fade(brightnessArray[i], 500);
+        faders[i].update();
+      }
     }
 
     isFading = root["fade"];
+    state = root["state"];
     fadeLowerBoundary = root["fadeLowerBoundary"];
     fadeUpperBoundary = root["fadeUpperBoundary"];
     spread = root["spread"];
