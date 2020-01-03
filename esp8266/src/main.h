@@ -35,13 +35,8 @@ typedef struct
 void saveConfigCallback();
 void connect();
 bool loadConfiguration();
-void onMqttMessage(char *topic, char *payload, AsyncMqttClientMessageProperties properties, size_t len, size_t index, size_t total);
-void onMqttConnect(bool);
-void onMqttDisconnect(AsyncMqttClientDisconnectReason reason);
 const char* getTopic(const char *topic);
 void setBoolean(char* &payload, bool &state);
-void setSingleBrightnessArray(char *brightnessTopic);
-void publishState();
 void log(const char* message);
 
 #endif // MAIN_H
